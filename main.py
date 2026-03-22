@@ -7,6 +7,7 @@ from handlers.start import start
 
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+print("TOKEN detectado:", bool(BOT_TOKEN))
 
 
 def main():
