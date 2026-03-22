@@ -1,14 +1,18 @@
-from database import get_connection
+from database.database import get_connection
 
 
-def create_user(user_id: int, referrer_id: int | None = None):
+def create_user(
+    telegram_id: int,
+    username: str | None,
+    referrer_id: int | None = None
+):
     conn = get_connection()
     cursor = conn.cursor()
 
-    # verificar si ya existe
+    # ✅ verificar si ya existe
     cursor.execute(
-        "SELECT user_id FROM users WHERE user_id = ?",
-        (user_id,)
+        "SELECT id FROM users WHERE telegram_id = ?",
+        (telegram_id,)
     )
     exists = cursor.fetchone()
 
@@ -16,15 +20,21 @@ def create_user(user_id: int, referrer_id: int | None = None):
         conn.close()
         return False
 
-    # crear usuario
+    # ✅ crear usuario
     cursor.execute(
         """
-        INSERT INTO users (user_id, balance, referrer_id)
-        VALUES (?, 0, ?)
+        INSERT INTO users (telegram_id, username)
+        VALUES (?, ?)
         """,
-        (user_id, referrer_id)
+        (telegram_id, username)
     )
 
     conn.commit()
     conn.close()
+
     return True
+
+
+# 🔗 generar link referral
+def generate_referral_link(bot_username: str, telegram_id: int) -> str:
+    return f"https://t.me/{bot_username}?start={telegram_id}"
