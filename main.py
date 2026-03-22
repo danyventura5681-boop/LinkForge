@@ -1,31 +1,33 @@
 import os
+import asyncio
 from telegram.ext import ApplicationBuilder, CommandHandler
 from keep_alive import keep_alive
 
-# importar handler
-from handlers.start import start
-
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-print("TOKEN detectado:", bool(BOT_TOKEN))
 
 
-def main():
+async def start(update, context):
+    await update.message.reply_text("🚀 LinkForge está activo.")
+
+
+async def main():
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN no encontrado")
 
-    # Crear aplicación
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # Registrar handlers
     app.add_handler(CommandHandler("start", start))
 
     print("✅ Bot iniciado correctamente...")
 
-    # Iniciar bot
-    app.run_polling()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+
+    # Mantener vivo
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
     keep_alive()
-    main()
+    asyncio.run(main())
