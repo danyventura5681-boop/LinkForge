@@ -17,12 +17,12 @@ PORT = int(os.environ.get("PORT", 8080))
 WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
 
 # ===========================================
-# IMPORTAR HANDLERS (ajusta según tus archivos)
+# IMPORTAR HANDLERS
 # ===========================================
 from handlers.start import start
-# from handlers.ranking import ranking
-# from handlers.click import handle_click
-# etc.
+# from handlers.link import register_link, show_ranking, handle_click
+# from handlers.referral import handle_referral
+# from handlers.recharge import recharge_menu, handle_payment
 
 # ===========================================
 # CREAR APP DE TELEGRAM
@@ -31,8 +31,11 @@ telegram_app = Application.builder().token(TOKEN).build()
 
 # Registrar handlers
 telegram_app.add_handler(CommandHandler("start", start))
-# telegram_app.add_handler(CommandHandler("ranking", ranking))
+# telegram_app.add_handler(CommandHandler("register", register_link))
+# telegram_app.add_handler(CommandHandler("ranking", show_ranking))
 # telegram_app.add_handler(CallbackQueryHandler(handle_click, pattern="^click_"))
+# telegram_app.add_handler(CommandHandler("referral", handle_referral))
+# telegram_app.add_handler(CommandHandler("recharge", recharge_menu))
 
 # ===========================================
 # CONFIGURAR WEBHOOK
@@ -77,8 +80,5 @@ async def on_shutdown():
     await telegram_app.bot.delete_webhook()
     await telegram_app.shutdown()
 
-# ===========================================
-# PUNTO DE ENTRADA
-# ===========================================
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)
