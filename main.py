@@ -2,7 +2,7 @@ import os
 import logging
 from fastapi import FastAPI, Request, Response
 from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 import uvicorn
 
 # Configuración
@@ -16,13 +16,8 @@ if not TOKEN:
 PORT = int(os.environ.get("PORT", 8080))
 WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
 
-# ===========================================
-# IMPORTAR HANDLERS
-# ===========================================
-from handlers.start import start
-# from handlers.link import register_link, show_ranking, handle_click
-# from handlers.referral import handle_referral
-# from handlers.recharge import recharge_menu, handle_payment
+# Importar handlers
+from handlers.start import start, button_handler
 
 # ===========================================
 # CREAR APP DE TELEGRAM
@@ -31,11 +26,7 @@ telegram_app = Application.builder().token(TOKEN).build()
 
 # Registrar handlers
 telegram_app.add_handler(CommandHandler("start", start))
-# telegram_app.add_handler(CommandHandler("register", register_link))
-# telegram_app.add_handler(CommandHandler("ranking", show_ranking))
-# telegram_app.add_handler(CallbackQueryHandler(handle_click, pattern="^click_"))
-# telegram_app.add_handler(CommandHandler("referral", handle_referral))
-# telegram_app.add_handler(CommandHandler("recharge", recharge_menu))
+telegram_app.add_handler(CallbackQueryHandler(button_handler))
 
 # ===========================================
 # CONFIGURAR WEBHOOK
