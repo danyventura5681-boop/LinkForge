@@ -1,26 +1,84 @@
 import os
-from telegram.ext import ApplicationBuilder, CommandHandler
-from keep_alive import keep_alive
+import logging
+from fastapi import FastAPI, Request, Response
+from telegram import Update
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
+import uvicorn
+
+# Configuración
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+TOKEN = os.environ.get("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("❌ BOT_TOKEN no configurado")
+
+PORT = int(os.environ.get("PORT", 8080))
+WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
+
+# ===========================================
+# IMPORTAR HANDLERS (ajusta según tus archivos)
+# ===========================================
 from handlers.start import start
+# from handlers.ranking import ranking
+# from handlers.click import handle_click
+# etc.
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# ===========================================
+# CREAR APP DE TELEGRAM
+# ===========================================
+telegram_app = Application.builder().token(TOKEN).build()
 
+# Registrar handlers
+telegram_app.add_handler(CommandHandler("start", start))
+# telegram_app.add_handler(CommandHandler("ranking", ranking))
+# telegram_app.add_handler(CallbackQueryHandler(handle_click, pattern="^click_"))
 
-def main():
-    if not BOT_TOKEN:
-        raise ValueError("BOT_TOKEN no encontrado")
+# ===========================================
+# CONFIGURAR WEBHOOK
+# ===========================================
+async def setup_webhook():
+    await telegram_app.initialize()
+    webhook_url = f"{WEBHOOK_URL}/webhook/{TOKEN}"
+    await telegram_app.bot.set_webhook(
+        url=webhook_url,
+        drop_pending_updates=True
+    )
+    logger.info(f"✅ Webhook configurado en {webhook_url}")
 
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+# ===========================================
+# APP FASTAPI PARA RENDER
+# ===========================================
+app = FastAPI()
 
-    # handlers
-    app.add_handler(CommandHandler("start", start))
+@app.post(f"/webhook/{TOKEN}")
+async def webhook(request: Request):
+    """Recibe actualizaciones de Telegram"""
+    try:
+        data = await request.json()
+        update = Update.de_json(data, telegram_app.bot)
+        await telegram_app.update_queue.put(update)
+        return Response(status_code=200)
+    except Exception as e:
+        logger.error(f"Error en webhook: {e}")
+        return Response(status_code=500)
 
-    print("✅ Bot iniciado correctamente...")
+@app.get("/")
+@app.get("/healthcheck")
+async def health():
+    return {"status": "ok", "service": "LinkForge"}
 
-    # ✅ ÚNICO polling correcto
-    app.run_polling()
+@app.on_event("startup")
+async def on_startup():
+    await setup_webhook()
 
+@app.on_event("shutdown")
+async def on_shutdown():
+    await telegram_app.bot.delete_webhook()
+    await telegram_app.shutdown()
 
+# ===========================================
+# PUNTO DE ENTRADA
+# ===========================================
 if __name__ == "__main__":
-    keep_alive()
-    main()
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
