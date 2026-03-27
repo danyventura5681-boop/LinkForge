@@ -4,6 +4,13 @@ from fastapi import FastAPI, Request, Response
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 import uvicorn
+# En la sección de imports
+from handlers.link import register, confirm_replace_link, cancel_register
+
+# Después de los otros handlers
+telegram_app.add_handler(CommandHandler("register", register))
+telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
+telegram_app.add_handler(CallbackQueryHandler(cancel_register, pattern="^cancel_register$"))
 
 # Configuración
 logging.basicConfig(level=logging.INFO)
