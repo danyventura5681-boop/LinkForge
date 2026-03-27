@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import get_user, create_user, get_user_stats
+from database import get_user, create_user, get_user_rank
 
 logger = logging.getLogger(__name__)
 
@@ -11,21 +11,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
 
-    # Verificar si el usuario existe (función compatible)
+    # Verificar si el usuario existe
     existing_user = get_user(telegram_id)
     
     if not existing_user:
-        # Crear usuario (solo con telegram_id y username - compatible)
+        # Crear usuario (sin referido por ahora)
         create_user(telegram_id, username)
         logger.info(f"✅ Nuevo usuario creado: {username} (ID: {telegram_id})")
-    
-    # Obtener estadísticas del usuario (si existe en la versión)
-    try:
-        stats = get_user_stats(telegram_id)
-        points = stats.get("points", 0)
-    except:
-        # Si get_user_stats no existe, usar valor por defecto
-        points = 0
+        reputation = 0
+        rank = "Nuevo"
+    else:
+        reputation = existing_user["reputation"]
+        rank = get_user_rank(telegram_id) or "?"
 
     text = (
         f"🚀 **¡Bienvenido a LinkForge, {username}!**\n\n"
@@ -41,7 +38,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Compra puntos: /recharge\n\n"
         f"📊 **Ver ranking:** /ranking\n\n"
         f"⚡ *Cada clic en tu link = 1 punto*\n\n"
-        f"💎 **Tus puntos:** {points}"
+        f"💎 **Tu reputación:** {reputation} puntos\n"
+        f"📈 **Posición en ranking:** #{rank}"
     )
 
     keyboard = [
