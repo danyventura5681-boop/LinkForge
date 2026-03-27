@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_user, create_user, get_user_rank, get_user_links
+from database.database import get_user, create_user, get_user_rank
 
 logger = logging.getLogger(__name__)
 
@@ -18,18 +18,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"✅ Nuevo usuario: {username}")
         reputation = 0
         rank = "Nuevo"
-        link_count = 0
     else:
-        reputation = existing_user["reputation"]
+        reputation = existing_user["reputation"] if existing_user["reputation"] else 0
         rank = get_user_rank(telegram_id) or "?"
-        links = get_user_links(telegram_id)
-        link_count = len(links)
 
     text = (
         f"🎉 **¡Bienvenido a LinkForge, {username}!**\n\n"
         f"💎 **Tu reputación:** {reputation} puntos\n"
-        f"📈 **Posición en ranking:** #{rank}\n"
-        f"🔗 **Links activos:** {link_count}/1\n\n"
+        f"📈 **Posición en ranking:** #{rank}\n\n"
         f"📌 Registra tu link para comenzar a promocionarlo.\n"
         f"🎁 Gana reputación visitando links de otros usuarios.\n"
         f"👥 Invita amigos y gana +50 por cada uno.\n"
@@ -62,7 +58,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     
     if data == "register_link":
-        # Redirigir al comando /register
         await query.edit_message_text(
             "🔗 **Registra tu link para promocionarlo**\n\n"
             "Usa el comando:\n"
@@ -72,7 +67,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
     elif data == "show_ranking":
-        # Redirigir al comando /ranking
         await query.edit_message_text(
             "📊 **Ranking de reputación**\n\n"
             "Usa el comando:\n"
@@ -82,7 +76,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
     elif data == "earn_reputation":
-        # Redirigir a ganar reputación
         await query.edit_message_text(
             "🎁 **Gana reputación**\n\n"
             "Para ganar puntos, visita los links de otros usuarios:\n\n"
@@ -96,7 +89,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
     elif data == "referral":
-        # Redirigir a invitación
         user_id = query.from_user.id
         bot_username = (await context.bot.get_me()).username
         ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
@@ -111,7 +103,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
     elif data == "vip_info":
-        # Mostrar información de VIP
         text = (
             "⭐ **PLANES VIP** ⭐\n\n"
             "**VIP 1** - $1 USD\n"
@@ -132,17 +123,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, parse_mode='Markdown')
         
     elif data == "admin_panel":
-        # Verificar si es admin (solo para @danyvg56)
         user_id = query.from_user.id
-        if user_id == 5057900537 or user_id == 123456789:  # Reemplaza con tu ID
+        if user_id == 5057900537:  # Tu ID de Telegram
             await query.edit_message_text(
                 "🛡️ **Panel de Administración**\n\n"
                 "Comandos disponibles:\n"
                 "`/add_reputation ID cantidad` - Añadir reputación\n"
                 "`/ban_user ID` - Banear usuario\n"
-                "`/unban_user ID` - Desbanear usuario\n"
-                "`/total_users` - Ver total de usuarios\n"
-                "`/all_links` - Ver todos los links\n\n"
+                "`/total_users` - Ver total de usuarios\n\n"
                 "En desarrollo: panel visual con botones.",
                 parse_mode='Markdown'
             )
