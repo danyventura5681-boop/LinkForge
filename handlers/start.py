@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_user, create_user, get_user_rank
+from database.database import get_user, create_user, get_user_rank, get_user_links
 
 logger = logging.getLogger(__name__)
 
@@ -14,28 +14,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     existing_user = get_user(telegram_id)
     
     if not existing_user:
-        # Verificar si viene por referido
-        args = context.args
-        referred_by = None
-        if args and args[0].startswith('ref_'):
-            referred_by = int(args[0][4:])
-        create_user(telegram_id, username, referred_by)
+        create_user(telegram_id, username)
         logger.info(f"✅ Nuevo usuario: {username}")
         reputation = 0
         rank = "Nuevo"
+        link_count = 0
     else:
         reputation = existing_user["reputation"]
         rank = get_user_rank(telegram_id) or "?"
+        links = get_user_links(telegram_id)
+        link_count = len(links)
 
     text = (
-        f"🚀 **¡Bienvenido a LinkForge, {username}!** 🚀\n\n"
+        f"🎉 **¡Bienvenido a LinkForge, {username}!**\n\n"
         f"💎 **Tu reputación:** {reputation} puntos\n"
-        f"📈 **Posición en ranking:** #{rank}\n\n"
-        f"🔗 **Registra tu link** para comenzar a promocionarlo.\n"
-        f"🎁 **Gana reputación** visitando links de otros usuarios.\n"
-        f"👥 **Invita amigos** y gana +50 por cada uno.\n"
-        f"💎 **Actualiza a VIP** para más beneficios.\n\n"
-        f"📌 **Comandos disponibles:**"
+        f"📈 **Posición en ranking:** #{rank}\n"
+        f"🔗 **Links activos:** {link_count}/1\n\n"
+        f"📌 Registra tu link para comenzar a promocionarlo.\n"
+        f"🎁 Gana reputación visitando links de otros usuarios.\n"
+        f"👥 Invita amigos y gana +50 por cada uno.\n"
+        f"⭐ Actualiza a VIP para más beneficios.\n\n"
+        f"**Comandos disponibles:**"
     )
 
     keyboard = [
@@ -43,7 +42,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
         [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
         [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
-        [InlineKeyboardButton("💎 VIP", callback_data="vip_menu")],
+        [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
         [InlineKeyboardButton("🛡️ Admin", callback_data="admin_panel")]
     ]
 
@@ -56,33 +55,99 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja los botones del menú principal"""
+    """Maneja los botones del menú"""
     query = update.callback_query
     await query.answer()
-
+    
     data = query.data
-
+    
     if data == "register_link":
+        # Redirigir al comando /register
         await query.edit_message_text(
-            "🔗 **Para registrar tu link, usa:**\n\n"
+            "🔗 **Registra tu link para promocionarlo**\n\n"
+            "Usa el comando:\n"
             "`/register https://tusitio.com`\n\n"
             "Recuerda incluir `http://` o `https://`",
             parse_mode='Markdown'
         )
+        
     elif data == "show_ranking":
-        from handlers.ranking import ranking
-        await ranking(update, context)
+        # Redirigir al comando /ranking
+        await query.edit_message_text(
+            "📊 **Ranking de reputación**\n\n"
+            "Usa el comando:\n"
+            "`/ranking`\n\n"
+            "Pronto podrás ver los usuarios con más reputación.",
+            parse_mode='Markdown'
+        )
+        
     elif data == "earn_reputation":
-        from handlers.reputation import earn_reputation
-        await earn_reputation(update, context)
+        # Redirigir a ganar reputación
+        await query.edit_message_text(
+            "🎁 **Gana reputación**\n\n"
+            "Para ganar puntos, visita los links de otros usuarios:\n\n"
+            "1️⃣ Ve al ranking con `/ranking`\n"
+            "2️⃣ Haz clic en el link de otro usuario\n"
+            "3️⃣ Gana +5 reputación por cada visita\n\n"
+            "También puedes:\n"
+            "• Invitar amigos: +50 por cada uno\n"
+            "• Comprar VIP: +500 a +6000 reputación",
+            parse_mode='Markdown'
+        )
+        
     elif data == "referral":
-        from handlers.referral import referral
-        await referral(update, context)
-    elif data == "vip_menu":
-        from handlers.vip import vip_menu
-        await vip_menu(update, context)
+        # Redirigir a invitación
+        user_id = query.from_user.id
+        bot_username = (await context.bot.get_me()).username
+        ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+        
+        await query.edit_message_text(
+            f"👥 **Invita amigos y gana reputación**\n\n"
+            f"🔗 **Tu enlace personal:**\n"
+            f"`{ref_link}`\n\n"
+            f"🎁 **Recompensa:** +50 reputación por cada amigo que se una\n\n"
+            f"📤 Comparte este enlace y empieza a ganar puntos extras.",
+            parse_mode='Markdown'
+        )
+        
+    elif data == "vip_info":
+        # Mostrar información de VIP
+        text = (
+            "⭐ **PLANES VIP** ⭐\n\n"
+            "**VIP 1** - $1 USD\n"
+            "• 3 links simultáneos\n"
+            "• +500 reputación\n"
+            "• 30 días de promoción\n\n"
+            "**VIP 2** - $5 USD\n"
+            "• 3 links simultáneos\n"
+            "• +2800 reputación\n"
+            "• 30 días de promoción\n\n"
+            "**VIP 3** - $10 USD\n"
+            "• 3 links simultáneos\n"
+            "• +6000 reputación\n"
+            "• 30 días de promoción\n\n"
+            "💳 **Aceptamos:** TRX, TON, ETH, BTC, BNB, SOL\n\n"
+            "Contacta a @danyvg56 para activar tu plan."
+        )
+        await query.edit_message_text(text, parse_mode='Markdown')
+        
     elif data == "admin_panel":
-        from handlers.admin import admin_panel
-        await admin_panel(update, context)
-    elif data == "back_to_start":
-        await start(update, context)
+        # Verificar si es admin (solo para @danyvg56)
+        user_id = query.from_user.id
+        if user_id == 5057900537 or user_id == 123456789:  # Reemplaza con tu ID
+            await query.edit_message_text(
+                "🛡️ **Panel de Administración**\n\n"
+                "Comandos disponibles:\n"
+                "`/add_reputation ID cantidad` - Añadir reputación\n"
+                "`/ban_user ID` - Banear usuario\n"
+                "`/unban_user ID` - Desbanear usuario\n"
+                "`/total_users` - Ver total de usuarios\n"
+                "`/all_links` - Ver todos los links\n\n"
+                "En desarrollo: panel visual con botones.",
+                parse_mode='Markdown'
+            )
+        else:
+            await query.edit_message_text("⛔ Acceso denegado. Solo administradores.")
+    
+    else:
+        await query.edit_message_text("❌ Función en desarrollo. Pronto estará disponible.")
