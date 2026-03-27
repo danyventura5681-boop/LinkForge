@@ -27,7 +27,22 @@ if not TOKEN:
 logger.info(f"✅ Token cargado correctamente (primeros 10 chars: {TOKEN[:10]}...)")
 
 PORT = int(os.environ.get("PORT", 8080))
-WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
+
+# ===========================================
+# CONSTRUIR WEBHOOK_URL DE FORMA ROBUSTA
+# ===========================================
+# En Render, el dominio es: https://<nombre-servicio>.onrender.com
+# Si no está disponible, intentamos con localhost para pruebas
+RENDER_SERVICE_NAME = os.environ.get("RENDER_SERVICE_NAME", "linkforge-17kt")
+RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
+
+if RENDER_EXTERNAL_URL:
+    WEBHOOK_URL = RENDER_EXTERNAL_URL
+else:
+    # Construir manualmente (funciona en Render)
+    WEBHOOK_URL = f"https://{RENDER_SERVICE_NAME}.onrender.com"
+
+logger.info(f"📡 Webhook base URL: {WEBHOOK_URL}")
 
 # Importar handlers
 from handlers.start import start, button_handler
@@ -49,6 +64,8 @@ logger.info("✅ Handlers registrados")
 async def setup_webhook():
     await telegram_app.initialize()
     webhook_url = f"{WEBHOOK_URL}/webhook/{TOKEN}"
+    logger.info(f"🔧 Configurando webhook en: {webhook_url}")
+    
     result = await telegram_app.bot.set_webhook(
         url=webhook_url,
         drop_pending_updates=True
@@ -68,13 +85,14 @@ async def webhook(request: Request):
     """Recibe actualizaciones de Telegram y las procesa"""
     try:
         data = await request.json()
-        logger.info(f"📨 Webhook recibido: {data.get('message', {}).get('text', 'sin texto')}")
-        
+        message_text = data.get('message', {}).get('text', 'sin texto')
+        logger.info(f"📨 Webhook recibido: {message_text}")
+
         update = Update.de_json(data, telegram_app.bot)
-        
+
         # Procesar el update de forma asíncrona
         await telegram_app.process_update(update)
-        
+
         return Response(status_code=200)
     except Exception as e:
         logger.error(f"❌ Error en webhook: {e}")
@@ -83,14 +101,16 @@ async def webhook(request: Request):
 @app.get("/")
 @app.get("/healthcheck")
 async def health():
-    return {"status": "ok", "service": "LinkForge"}
+    return {"status": "ok", "service": "LinkForge", "webhook_url": f"{WEBHOOK_URL}/webhook/{TOKEN[:5]}..."}
 
 @app.on_event("startup")
 async def on_startup():
+    logger.info("🚀 Iniciando servidor...")
     await setup_webhook()
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    logger.info("🛑 Apagando servidor...")
     await telegram_app.bot.delete_webhook()
     await telegram_app.shutdown()
 
