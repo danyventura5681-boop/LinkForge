@@ -48,3 +48,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🔗 Envíame tu link con /register [URL]")
     elif query.data == "show_ranking":
         await query.edit_message_text("📊 Ranking en desarrollo. Usa /ranking")
+# En el keyboard del start.py
+keyboard = [
+    [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
+    [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],  # Mantiene callback
+    ...
+]
+
+# En button_handler, actualiza:
+elif data == "register_link":
+    await query.edit_message_text(
+        "🔗 **Para registrar tu link, usa:**\n\n"
+        "`/register https://tusitio.com`\n\n"
+        "Recuerda incluir `http://` o `https://`",
+        parse_mode='Markdown'
+    )
