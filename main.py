@@ -36,7 +36,7 @@ from handlers.admin import (
 from handlers.vip import (
     vip_menu, buy_vip, check_payment, check_payment_retry, confirm_payment_command
 )
-from handlers import back_to_start
+from handlers.back import back_to_start
 
 # Estados para conversación
 WAITING_USER_ID, WAITING_REPUTATION = range(2)
