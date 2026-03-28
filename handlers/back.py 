@@ -1,0 +1,70 @@
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from database.database import get_user, get_user_links, get_user_rank
+from handlers.start import format_time_remaining
+
+logger = logging.getLogger(__name__)
+
+async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handler único para volver al menú principal desde cualquier lugar.
+    Reconstruye el panel principal dinámicamente.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    existing_user = get_user(user_id)
+    
+    if not existing_user:
+        await query.edit_message_text("❌ Usuario no encontrado. Usa /start para comenzar.")
+        return
+    
+    username = existing_user["username"] or "Usuario"
+    reputation = existing_user["reputation"] or 0
+    rank = get_user_rank(user_id) or "?"
+    links = get_user_links(user_id)
+    vip_level = existing_user.get("vip_level", 0)
+    
+    # Obtener link principal
+    main_link = links[0] if links else None
+    if main_link and main_link.get("expires_at"):
+        time_remaining = format_time_remaining(main_link["expires_at"])
+        link_display = f"🔗 **Link activo:** `{main_link['url']}`\n⏳ **Tiempo restante:** {time_remaining}"
+    else:
+        link_display = "🔗 **Link:** No registrado"
+    
+    text = (
+        f"🎉 **¡Bienvenido a LinkForge, {username}!**\n\n"
+        f"🆔 **Tu ID:** `{user_id}`\n"
+        f"💎 **Tu reputación:** {reputation} puntos\n"
+        f"📈 **Posición en ranking:** #{rank}\n"
+        f"⭐ **VIP Nivel:** {vip_level}\n\n"
+        f"{link_display}\n\n"
+        f"📌 Registra tu link para comenzar a promocionarlo.\n"
+        f"🎁 Gana reputación visitando links de otros usuarios.\n"
+        f"👥 Invita amigos y gana +50 por cada uno.\n"
+        f"⭐ Actualiza a VIP para más beneficios.\n\n"
+        f"**Comandos disponibles:**"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
+        [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
+        [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
+        [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
+        [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
+    ]
+    
+    # Botones de administración solo para admin
+    if user_id == 5057900537:
+        keyboard.append([InlineKeyboardButton("🛡️ Admin", callback_data="admin_panel")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
