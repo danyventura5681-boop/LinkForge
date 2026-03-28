@@ -1,4 +1,4 @@
-import os
+⁹import os
 import logging
 from fastapi import FastAPI, Request, Response
 from telegram import Update
@@ -36,7 +36,7 @@ from handlers.admin import (
 from handlers.vip import (
     vip_menu, buy_vip, check_payment, check_payment_retry, confirm_payment_command
 )
-from handlers.back import back_to_start
+from handlers import back_to_start
 
 # Estados para conversación
 WAITING_USER_ID, WAITING_REPUTATION = range(2)
