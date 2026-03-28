@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request, Response
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ConversationHandler
 import uvicorn
+import asyncio
 
 # Configuración
 logging.basicConfig(level=logging.INFO)
@@ -47,7 +48,7 @@ telegram_app.add_handler(CommandHandler("vip", vip_menu))
 telegram_app.add_handler(CommandHandler("start", process_referral))
 
 # Handlers de callbacks
-telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_menu|admin_panel|back_to_start)$"))
+telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_menu|admin_panel|back_to_start|my_link|change_link|renew_link|add_link_vip)$"))
 telegram_app.add_handler(CallbackQueryHandler(ranking_button_handler, pattern="^(refresh_ranking|back_to_start)$"))
 telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^visit_link_"))
 telegram_app.add_handler(CallbackQueryHandler(more_links, pattern="^more_links$"))
@@ -76,6 +77,65 @@ async def setup_webhook():
     await telegram_app.bot.set_webhook(url=webhook_url, drop_pending_updates=True)
     logger.info(f"✅ Webhook configurado en {webhook_url}")
 
+# ===========================================
+# FUNCIONES PARA NOTIFICACIONES
+# ===========================================
+async def check_expiring_links():
+    """Revisa links que expiran pronto y envía notificaciones"""
+    try:
+        from database.database import get_expiring_links, get_user
+        
+        # Horas antes de expirar para notificar
+        checkpoints = [48, 24, 15, 10, 5, 2, 1]
+        
+        for hours in checkpoints:
+            expiring_links = get_expiring_links(hours)
+            
+            for link in expiring_links:
+                user_id = link["user_id"]
+                user = get_user(user_id)
+                
+                if not user:
+                    continue
+                
+                # Mensaje según horas restantes
+                if hours == 48:
+                    message = (
+                        f"⏰ **Tu link expira en 48 horas.**\n\n"
+                        f"🔗 `{link['url']}`\n\n"
+                        f"Actualiza a VIP para extender la promoción a 30 días sin perder reputación.\n\n"
+                        f"👉 /vip"
+                    )
+                elif hours <= 24:
+                    message = (
+                        f"⚠️ **¡Tu link expira en {hours} horas!**\n\n"
+                        f"🔗 `{link['url']}`\n\n"
+                        f"Renueva con VIP para mantener tu reputación y extender la promoción.\n\n"
+                        f"👉 /vip"
+                    )
+                else:
+                    message = (
+                        f"🔔 **Recordatorio:** Tu link expira en {hours} horas.\n\n"
+                        f"🔗 `{link['url']}`\n\n"
+                        f"¡Asegura tu reputación con VIP!"
+                    )
+                
+                try:
+                    await telegram_app.bot.send_message(
+                        chat_id=user_id,
+                        text=message,
+                        parse_mode='Markdown'
+                    )
+                    logger.info(f"✅ Notificación enviada a {user_id}: expira en {hours}h")
+                except Exception as e:
+                    logger.error(f"❌ Error enviando notificación a {user_id}: {e}")
+                    
+    except Exception as e:
+        logger.error(f"❌ Error en check_expiring_links: {e}")
+
+# ===========================================
+# ENDPOINTS DE API
+# ===========================================
 app = FastAPI()
 
 @app.post(f"/webhook/{TOKEN}")
@@ -95,14 +155,29 @@ async def webhook(request: Request):
 async def health():
     return {"status": "ok", "service": "LinkForge"}
 
+@app.get("/check_expiring")
+async def trigger_expiring_check():
+    """Endpoint para que cron-job.org active las notificaciones"""
+    try:
+        await check_expiring_links()
+        return {"status": "ok", "message": "Notificaciones procesadas"}
+    except Exception as e:
+        logger.error(f"❌ Error en /check_expiring: {e}")
+        return {"status": "error", "message": str(e)}
+
+# ===========================================
+# INICIO Y APAGADO
+# ===========================================
 @app.on_event("startup")
 async def on_startup():
     await setup_webhook()
+    logger.info("🚀 LinkForge iniciado correctamente")
 
 @app.on_event("shutdown")
 async def on_shutdown():
     await telegram_app.bot.delete_webhook()
     await telegram_app.shutdown()
+    logger.info("🛑 LinkForge apagado")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=PORT)
