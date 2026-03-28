@@ -5,29 +5,19 @@ from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database.database import get_user, activate_vip, register_payment, get_user_links, get_pending_payments, confirm_payment
+from config import VIP_PLANS, TRX_ADDRESS, TRX_PER_USD
 
 logger = logging.getLogger(__name__)
 
-# Planes VIP
-VIP_PLANS = {
-    1: {"name": "VIP 1", "price_usd": 1, "reputation": 500, "days": 30, "max_links": 3},
-    2: {"name": "VIP 2", "price_usd": 5, "reputation": 2800, "days": 30, "max_links": 3},
-    3: {"name": "VIP 3", "price_usd": 10, "reputation": 6000, "days": 30, "max_links": 3}
-}
-
-# Direcciones de criptomonedas
+# Diccionario de direcciones de criptomonedas
 CRYPTO_ADDRESSES = {
-    "TRX": "TK2K6W7vFehHLB6eQ9CPPjcJ1E6ErCu12Y",
+    "TRX": TRX_ADDRESS,
     "TON": "UQBJG1Dh1cRpHZqAMJ0qgD0CDyIUo0y2u82oG--pMm0G0jkl",
     "ETH": "0x1526Fa97f7E7d8A0AB76F3fb94F97A3E1281cA81",
     "BTC": "bc1q4netsk5cnyszu4s036nhj26pm3a405j6wnjnsy",
     "BNB": "0x1526Fa97f7E7d8A0AB76F3fb94F97A3E1281cA81",
     "SOL": "9ncG6PPVVPueqELv3rC8JeNUbnkbhdQ9E522BDJqZvF"
 }
-
-# Tasa de cambio fija (1 USD = 10 TRX)
-# En producción, esto debería obtenerse de una API
-TRX_PER_USD = 10
 
 def get_trx_amount(usd_amount):
     """Convierte USD a TRX según tasa fija"""
@@ -131,11 +121,11 @@ async def buy_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     expected_trx = get_trx_amount(plan['price_usd'])
     payment_hash = generate_payment_hash(user_id, level, plan['price_usd'])
-    
+
     # Guardar plan seleccionado en contexto
     context.user_data['pending_vip'] = level
     context.user_data['payment_hash'] = payment_hash
-    
+
     # Registrar pago pendiente en la base de datos
     try:
         register_payment(
@@ -236,7 +226,7 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Verificar en base de datos si el pago ya fue confirmado
     from database.database import get_payment_by_hash
     payment = get_payment_by_hash(payment_hash)
-    
+
     if payment and payment.get("status") == "confirmed":
         plan = VIP_PLANS.get(pending_vip)
         await query.edit_message_text(
@@ -281,9 +271,9 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
 
     # Buscar en la base de datos por código de pago
     from database.database import get_payment_by_hash, get_pending_payments
-    
+
     payment = get_payment_by_hash(payment_ref)
-    
+
     # Si no se encuentra, intentar formato antiguo (VIP{level}_{user_id}_{timestamp})
     if not payment and payment_ref.startswith("VIP"):
         try:
@@ -291,12 +281,12 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
             if len(parts) >= 3 and parts[0].startswith('VIP'):
                 level = int(parts[0][3:])
                 target_user_id = int(parts[1])
-                
+
                 plan = VIP_PLANS.get(level)
                 if plan:
                     # Activar VIP directamente
                     activate_vip(target_user_id, level, plan['days'], plan['reputation'])
-                    
+
                     await update.message.reply_text(
                         f"✅ **VIP activado correctamente!**\n\n"
                         f"👤 Usuario ID: `{target_user_id}`\n"
@@ -306,7 +296,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                         f"📝 Referencia: `{payment_ref}`",
                         parse_mode='Markdown'
                     )
-                    
+
                     # Notificar al usuario
                     try:
                         await context.bot.send_message(
@@ -323,7 +313,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                     return
         except Exception as e:
             logger.error(f"Error procesando formato antiguo: {e}")
-    
+
     # Si encontramos el pago en la base de datos
     if payment and payment.get("status") == "pending":
         plan = VIP_PLANS.get(payment["vip_level"])
@@ -331,7 +321,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
             # Confirmar pago y activar VIP
             confirm_payment(payment_ref)
             activate_vip(payment["user_id"], payment["vip_level"], plan['days'], plan['reputation'])
-            
+
             await update.message.reply_text(
                 f"✅ **Pago confirmado y VIP activado!**\n\n"
                 f"👤 Usuario ID: `{payment['user_id']}`\n"
@@ -341,7 +331,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                 f"📝 Código: `{payment_ref}`",
                 parse_mode='Markdown'
             )
-            
+
             # Notificar al usuario
             try:
                 await context.bot.send_message(
@@ -351,8 +341,8 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                          f"🎁 +{plan['reputation']} reputación\n"
                          f"⏳ {plan['days']} días de promoción\n\n"
                          f"Usa /start para ver tu nuevo estado.",
-                    parse_mode='Markdown'
-                )
+                            parse_mode='Markdown'
+                        )
             except Exception as e:
                 logger.error(f"Error notificando al usuario: {e}")
         else:
