@@ -20,7 +20,7 @@ WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
 # ===========================================
 # IMPORTAR HANDLERS
 # ===========================================
-from handlers.start import start, button_handler
+from handlers.start import start, button_handler, back_to_start
 from handlers.link import (
     register_start, process_link_message, confirm_replace_link, 
     confirm_add_link, cancel_register_callback
@@ -36,7 +36,6 @@ from handlers.admin import (
 from handlers.vip import (
     vip_menu, buy_vip, check_payment, check_payment_retry, confirm_payment_command
 )
-from handlers.back import back_to_start
 
 # Estados para conversación
 WAITING_USER_ID, WAITING_REPUTATION = range(2)
