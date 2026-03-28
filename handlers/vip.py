@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_user, activate_vip, register_payment, get_user_links, get_pending_payments, confirm_payment
+from database.database import get_user, activate_vip, register_payment, get_user_links
 from config import VIP_PLANS, TRX_ADDRESS, TRX_PER_USD
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ async def vip_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if current_vip > 0:
         text += f"\n📌 **Tus links activos:** {len(get_user_links(user_id))}/{3 if current_vip > 0 else 1}"
 
-    keyboard.append([InlineKeyboardButton("🏠 Volver al inicio", callback_data="back_to_start")])
+    keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")])
 
     await update.message.reply_text(
         text,
@@ -115,7 +115,10 @@ async def buy_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     plan = VIP_PLANS.get(level)
 
     if not plan:
-        await query.edit_message_text("❌ Plan no válido.")
+        await query.edit_message_text(
+            "❌ Plan no válido.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]])
+        )
         return
 
     user_id = query.from_user.id
@@ -150,13 +153,13 @@ async def buy_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"`{CRYPTO_ADDRESSES['TRX']}`\n\n"
         f"📝 **Tu código de pago:** `{payment_hash}`\n\n"
         f"⚠️ **Importante:** Incluye el código de pago en el **memo** de la transacción para activación automática.\n\n"
-        f"✅ Una vez enviado, el bot verificará automáticamente el pago (cada 10 minutos) y activará tu VIP.\n"
+        f"✅ Una vez enviado, el bot verificará automáticamente el pago y activará tu VIP.\n"
         f"🔄 También puedes usar el botón 'Verificar pago' para comprobar manualmente."
     )
 
     keyboard = [
         [InlineKeyboardButton("🔄 Verificar pago", callback_data="check_payment")],
-        [InlineKeyboardButton("🏠 Volver a VIP", callback_data="vip_menu")]
+        [InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]
     ]
 
     await query.edit_message_text(
@@ -177,7 +180,8 @@ async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not pending_vip or not payment_hash:
         await query.edit_message_text(
             "❌ No hay ninguna compra pendiente.\n\n"
-            "Usa /vip para seleccionar un plan.",
+            "Usa el botón 'VIP' para seleccionar un plan.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]]),
             parse_mode='Markdown'
         )
         return
@@ -191,7 +195,7 @@ async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"💰 **Plan:** {plan['name']} (${plan['price_usd']} USD ≈ {expected_trx} TRX)\n"
         f"🏦 **Dirección:** `{CRYPTO_ADDRESSES['TRX']}`\n\n"
         f"⚠️ **Verificación automática:**\n"
-        f"El bot revisa los pagos cada 10 minutos.\n\n"
+        f"El bot revisa los pagos automáticamente.\n\n"
         f"📩 **Si ya enviaste el pago y no se ha activado:**\n"
         f"1. Verifica que enviaste exactamente {expected_trx} TRX\n"
         f"2. Verifica que incluiste `{payment_hash}` en el memo\n"
@@ -201,7 +205,7 @@ async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("✅ Contactar admin", url="https://t.me/danyvg56")],
         [InlineKeyboardButton("🔄 Reintentar verificación", callback_data="check_payment_retry")],
-        [InlineKeyboardButton("🏠 Volver a VIP", callback_data="vip_menu")]
+        [InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]
     ]
 
     await query.edit_message_text(
@@ -220,7 +224,10 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
     payment_hash = context.user_data.get('payment_hash')
 
     if not pending_vip or not payment_hash:
-        await query.edit_message_text("❌ No hay pago pendiente para verificar.")
+        await query.edit_message_text(
+            "❌ No hay pago pendiente para verificar.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]])
+        )
         return
 
     # Verificar en base de datos si el pago ya fue confirmado
@@ -234,7 +241,8 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"⭐ Tu {plan['name']} ha sido activado.\n"
             f"🎁 +{plan['reputation']} reputación\n"
             f"⏳ {plan['days']} días de promoción\n\n"
-            f"Usa /start para ver tu nuevo estado.",
+            f"Usa el botón para ver tu nuevo estado.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="back_to_start")]]),
             parse_mode='Markdown'
         )
         context.user_data.pop('pending_vip', None)
@@ -243,8 +251,12 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text(
             f"⏳ **Pago aún no confirmado.**\n\n"
             f"📝 Código: `{payment_hash}`\n\n"
-            f"El bot verifica pagos cada 10 minutos.\n"
-            f"Si ya enviaste el pago, espera unos minutos y vuelve a intentar.",
+            f"Si ya enviaste el pago, espera unos minutos y vuelve a intentar.\n\n"
+            f"💡 Si el problema persiste, contacta al administrador.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Contactar admin", url="https://t.me/danyvg56")],
+                [InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]
+            ]),
             parse_mode='Markdown'
         )
 
@@ -253,8 +265,11 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
 
     # Verificar que es el admin
-    if user_id != 5057900537:  # Tu ID de Telegram
-        await update.message.reply_text("⛔ Solo administradores pueden usar este comando.")
+    if user_id != 5057900537:
+        await update.message.reply_text(
+            "⛔ Solo administradores pueden usar este comando.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+        )
         return
 
     args = context.args
@@ -262,7 +277,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(
             "📝 **Uso:** `/confirmar [CODIGO_PAGO]`\n\n"
             "Ejemplo: `/confirmar a1b2c3d4e5f6g7h8`\n\n"
-            "También puedes usar: `/confirmar VIP1_123456789_20250327120000` (formato antiguo)",
+            "También puedes usar el formato antiguo: `/confirmar VIP1_123456789_20250327120000`",
             parse_mode='Markdown'
         )
         return
@@ -270,8 +285,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     payment_ref = args[0]
 
     # Buscar en la base de datos por código de pago
-    from database.database import get_payment_by_hash, get_pending_payments
-
+    from database.database import get_payment_by_hash
     payment = get_payment_by_hash(payment_ref)
 
     # Si no se encuentra, intentar formato antiguo (VIP{level}_{user_id}_{timestamp})
@@ -284,7 +298,6 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
 
                 plan = VIP_PLANS.get(level)
                 if plan:
-                    # Activar VIP directamente
                     activate_vip(target_user_id, level, plan['days'], plan['reputation'])
 
                     await update.message.reply_text(
@@ -292,12 +305,10 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                         f"👤 Usuario ID: `{target_user_id}`\n"
                         f"⭐ Plan: {plan['name']}\n"
                         f"🎁 +{plan['reputation']} reputación\n"
-                        f"⏳ {plan['days']} días de promoción\n\n"
-                        f"📝 Referencia: `{payment_ref}`",
+                        f"⏳ {plan['days']} días de promoción",
                         parse_mode='Markdown'
                     )
 
-                    # Notificar al usuario
                     try:
                         await context.bot.send_message(
                             chat_id=target_user_id,
@@ -305,7 +316,8 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                                  f"⭐ Plan: {plan['name']}\n"
                                  f"🎁 +{plan['reputation']} reputación\n"
                                  f"⏳ {plan['days']} días de promoción\n\n"
-                                 f"Usa /start para ver tu nuevo estado.",
+                                 f"Usa el botón para ver tu nuevo estado.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="back_to_start")]]),
                             parse_mode='Markdown'
                         )
                     except Exception as e:
@@ -318,7 +330,6 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     if payment and payment.get("status") == "pending":
         plan = VIP_PLANS.get(payment["vip_level"])
         if plan:
-            # Confirmar pago y activar VIP
             confirm_payment(payment_ref)
             activate_vip(payment["user_id"], payment["vip_level"], plan['days'], plan['reputation'])
 
@@ -327,12 +338,10 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                 f"👤 Usuario ID: `{payment['user_id']}`\n"
                 f"⭐ Plan: {plan['name']}\n"
                 f"🎁 +{plan['reputation']} reputación\n"
-                f"💰 Monto: ${plan['price_usd']} USD\n"
-                f"📝 Código: `{payment_ref}`",
+                f"💰 Monto: ${plan['price_usd']} USD",
                 parse_mode='Markdown'
             )
 
-            # Notificar al usuario
             try:
                 await context.bot.send_message(
                     chat_id=payment["user_id"],
@@ -340,14 +349,15 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                          f"⭐ Tu {plan['name']} ha sido activado.\n"
                          f"🎁 +{plan['reputation']} reputación\n"
                          f"⏳ {plan['days']} días de promoción\n\n"
-                         f"Usa /start para ver tu nuevo estado.",
-                            parse_mode='Markdown'
-                        )
+                         f"Usa el botón para ver tu nuevo estado.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="back_to_start")]]),
+                    parse_mode='Markdown'
+                )
             except Exception as e:
                 logger.error(f"Error notificando al usuario: {e}")
         else:
             await update.message.reply_text("❌ Plan no válido en el pago.")
     elif payment and payment.get("status") == "confirmed":
-        await update.message.reply_text(f"ℹ️ Este pago ya fue confirmado anteriormente.")
+        await update.message.reply_text("ℹ️ Este pago ya fue confirmado anteriormente.")
     else:
         await update.message.reply_text(f"❌ No se encontró ningún pago pendiente con el código: `{payment_ref}`", parse_mode='Markdown')
