@@ -21,7 +21,10 @@ WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
 # IMPORTAR HANDLERS
 # ===========================================
 from handlers.start import start, button_handler
-from handlers.link import register, confirm_replace_link, cancel_register, confirm_add_link
+from handlers.link import (
+    register, confirm_replace_link, cancel_register_callback, 
+    confirm_add_link, register_start, process_link_message, cancel_register
+)
 from handlers.ranking import ranking, ranking_button_handler
 from handlers.reputation import earn_reputation, visit_link, more_links
 from handlers.referral import referral, process_referral
@@ -42,15 +45,22 @@ telegram_app = Application.builder().token(TOKEN).build()
 # HANDLERS DE COMANDOS
 # ===========================================
 telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("register", register))
+telegram_app.add_handler(CommandHandler("register", register_start))
 telegram_app.add_handler(CommandHandler("ranking", ranking))
 telegram_app.add_handler(CommandHandler("reputation", earn_reputation))
 telegram_app.add_handler(CommandHandler("referral", referral))
 telegram_app.add_handler(CommandHandler("vip", vip_menu))
-telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))  # Nuevo comando admin
+telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))
+telegram_app.add_handler(CommandHandler("cancelar", cancel_register))
 
 # Handler para referidos (sin comando, desde el enlace)
 telegram_app.add_handler(CommandHandler("start", process_referral))
+
+# ===========================================
+# HANDLERS DE MENSAJES (MODO CONVERSACIÓN)
+# ===========================================
+# Este handler procesa los mensajes de texto cuando el bot está esperando un link
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
 
 # ===========================================
 # HANDLERS DE CALLBACKS
@@ -68,7 +78,7 @@ telegram_app.add_handler(CallbackQueryHandler(more_links, pattern="^more_links$"
 # Links
 telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
-telegram_app.add_handler(CallbackQueryHandler(cancel_register, pattern="^cancel_register$"))
+telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern="^cancel_register$"))
 
 # VIP
 telegram_app.add_handler(CallbackQueryHandler(vip_menu, pattern="^vip_menu$"))
@@ -160,9 +170,7 @@ async def check_expiring_links():
 async def check_pending_payments():
     """Revisa pagos pendientes y verifica si fueron completados"""
     try:
-        from database.database import get_pending_payments, confirm_payment, activate_vip
-        from handlers.vip import VIP_PLANS, TRX_PER_USD, CRYPTO_ADDRESSES
-
+        from database.database import get_pending_payments
         pending_payments = get_pending_payments()
         results = []
 
