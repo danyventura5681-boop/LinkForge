@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database.database import get_user, register_link, get_user_links
@@ -19,12 +20,39 @@ def is_valid_url(url: str) -> bool:
     """Verifica si una URL es válida."""
     return re.match(URL_PATTERN, url) is not None
 
+def get_promotion_days(user):
+    """Determina los días de promoción según el nivel VIP del usuario"""
+    if user and user.get("vip_level", 0) > 0:
+        return 30  # VIP: 30 días
+    return 10  # Usuario normal: 10 días
+
+def format_expiration_date(expires_at):
+    """Formatea la fecha de expiración para mostrar"""
+    if not expires_at:
+        return "No disponible"
+    
+    try:
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+        
+        now = datetime.utcnow()
+        remaining = expires_at - now
+        days = remaining.days
+        hours = remaining.seconds // 3600
+        
+        if days > 0:
+            return f"{days} días, {hours} horas"
+        else:
+            return f"{hours} horas"
+    except Exception:
+        return "No disponible"
+
 async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Registra un link para el usuario."""
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
-    
+
     # Verificar que se proporcionó una URL
     if not context.args:
         await update.message.reply_text(
@@ -33,9 +61,9 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         return
-    
+
     url = context.args[0]
-    
+
     # Validar URL
     if not is_valid_url(url):
         await update.message.reply_text(
@@ -45,63 +73,140 @@ async def register(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         return
+
+    # Obtener usuario para verificar nivel VIP
+    db_user = get_user(telegram_id)
+    days = get_promotion_days(db_user)
+    vip_level = db_user.get("vip_level", 0) if db_user else 0
     
     # Verificar si el usuario ya tiene links activos
     existing_links = get_user_links(telegram_id)
-    
+
     if existing_links and len(existing_links) >= 1:
-        # Por ahora solo 1 link (sin VIP)
-        keyboard = [
-            [InlineKeyboardButton("💎 Actualizar a VIP", callback_data="vip_info")],
-            [InlineKeyboardButton("❌ Cancelar", callback_data="cancel_register")]
-        ]
-        await update.message.reply_text(
-            f"⚠️ **Ya tienes un link activo.**\n\n"
-            f"📌 Link actual: `{existing_links[0]['url']}`\n\n"
-            f"Con VIP puedes tener hasta 3 links simultáneos.\n\n"
-            f"¿Quieres reemplazar tu link actual?",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-        # Guardar la nueva URL en contexto para confirmación
-        context.user_data['pending_url'] = url
-        return
+        # Verificar si puede tener más links (VIP)
+        max_links = 3 if vip_level > 0 else 1
+        
+        if len(existing_links) >= max_links:
+            # Alcanzó el límite de links
+            keyboard = [
+                [InlineKeyboardButton("⭐ Actualizar VIP", callback_data="vip_info")],
+                [InlineKeyboardButton("✏️ Reemplazar Link", callback_data="replace_link")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="cancel_register")]
+            ]
+            await update.message.reply_text(
+                f"⚠️ **Límite de links alcanzado.**\n\n"
+                f"📌 Links activos: {len(existing_links)}/{max_links}\n\n"
+                f"¿Qué deseas hacer?\n"
+                f"• Actualizar a VIP para más links\n"
+                f"• Reemplazar tu link actual",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            context.user_data['pending_url'] = url
+            return
+        else:
+            # Tiene espacio para agregar otro link
+            keyboard = [
+                [InlineKeyboardButton("✅ Agregar como nuevo", callback_data="confirm_add_link")],
+                [InlineKeyboardButton("✏️ Reemplazar actual", callback_data="replace_link")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="cancel_register")]
+            ]
+            await update.message.reply_text(
+                f"⚠️ **Ya tienes un link activo.**\n\n"
+                f"📌 Link actual: `{existing_links[0]['url']}`\n\n"
+                f"Con VIP Nivel {vip_level} puedes tener hasta {max_links} links.\n\n"
+                f"¿Qué deseas hacer?",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            context.user_data['pending_url'] = url
+            return
+
+    # Registrar nuevo link
+    register_link(telegram_id, url, link_number=1, days=days)
     
-    # Registrar nuevo link (10 días de promoción)
-    register_link(telegram_id, url, link_number=1, days=10)
+    # Calcular fecha de expiración para mostrar
+    expires_at = datetime.utcnow() + timedelta(days=days)
+    expires_formatted = format_expiration_date(expires_at)
+    
+    vip_text = " (VIP: 30 días)" if vip_level > 0 else ""
     
     await update.message.reply_text(
         f"✅ **¡Link registrado con éxito!**\n\n"
         f"🔗 Tu link: `{url}`\n"
-        f"⏳ Promoción activa por **10 días**\n\n"
+        f"⏳ Promoción activa por **{days} días**{vip_text}\n"
+        f"📅 Expira: {expires_at.strftime('%d/%m/%Y %H:%M')} UTC\n"
+        f"⏰ Tiempo restante: {expires_formatted}\n\n"
         f"📊 Usa /ranking para ver tu posición.\n"
         f"🎁 Invita amigos con /referral para ganar reputación.",
         parse_mode='Markdown'
     )
-    logger.info(f"✅ Link registrado para {username}: {url}")
+    logger.info(f"✅ Link registrado para {username}: {url} ({days} días)")
 
 async def confirm_replace_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Confirma el reemplazo del link actual."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = query.from_user.id
     new_url = context.user_data.get('pending_url')
-    
+
     if not new_url:
         await query.edit_message_text("❌ Operación cancelada. No hay link pendiente.")
         return
+
+    # Obtener usuario para determinar días
+    db_user = get_user(user_id)
+    days = get_promotion_days(db_user)
     
     # Eliminar link anterior y registrar nuevo
     from database.database import delete_links, register_link
     delete_links(user_id)
-    register_link(user_id, new_url, link_number=1, days=10)
+    register_link(user_id, new_url, link_number=1, days=days)
     
+    expires_at = datetime.utcnow() + timedelta(days=days)
+    vip_text = " (VIP: 30 días)" if days == 30 else ""
+
     await query.edit_message_text(
         f"✅ **Link reemplazado con éxito!**\n\n"
         f"🔗 Nuevo link: `{new_url}`\n"
-        f"⏳ Promoción activa por **10 días**\n\n"
-        f"⚠️ Tu reputación anterior se mantiene.",
+        f"⏳ Promoción activa por **{days} días**{vip_text}\n"
+        f"📅 Expira: {expires_at.strftime('%d/%m/%Y %H:%M')} UTC\n\n"
+        f"⚠️ Tu reputación se mantiene.",
+        parse_mode='Markdown'
+    )
+    context.user_data.pop('pending_url', None)
+
+async def confirm_add_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Confirma agregar un nuevo link (para usuarios VIP)."""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    new_url = context.user_data.get('pending_url')
+
+    if not new_url:
+        await query.edit_message_text("❌ Operación cancelada. No hay link pendiente.")
+        return
+
+    # Obtener usuario para determinar días y número de link
+    db_user = get_user(user_id)
+    days = get_promotion_days(db_user)
+    existing_links = get_user_links(user_id)
+    next_link_number = len(existing_links) + 1
+    
+    # Registrar nuevo link
+    from database.database import register_link
+    register_link(user_id, new_url, link_number=next_link_number, days=days)
+    
+    expires_at = datetime.utcnow() + timedelta(days=days)
+
+    await query.edit_message_text(
+        f"✅ **¡Nuevo link agregado con éxito!**\n\n"
+        f"🔗 Link #{next_link_number}: `{new_url}`\n"
+        f"⏳ Promoción activa por **{days} días** (VIP)\n"
+        f"📅 Expira: {expires_at.strftime('%d/%m/%Y %H:%M')} UTC\n\n"
+        f"📊 Usa /ranking para ver tu posición.",
         parse_mode='Markdown'
     )
     context.user_data.pop('pending_url', None)
