@@ -10,24 +10,28 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
-    
+
     bot_username = (await context.bot.get_me()).username
     referral_link = f"https://t.me/{bot_username}?start=ref_{telegram_id}"
-    
+
+    # Obtener estadísticas de referidos (si quieres implementar después)
+    # total_referrals = get_referral_count(telegram_id)
+
     text = (
         f"👥 **Invita amigos y gana reputación** 👥\n\n"
         f"🔗 **Tu enlace de referido:**\n"
         f"`{referral_link}`\n\n"
         f"🎁 **Recompensa:**\n"
         f"Por cada amigo que se una usando tu enlace, ¡ganas **+50 reputación**!\n\n"
-        f"📤 Comparte el enlace con tus amigos y empieza a ganar."
+        f"📤 Comparte el enlace con tus amigos y empieza a ganar puntos extras.\n\n"
+        f"💡 *Consejo: Comparte el enlace en tus redes sociales para más recompensas.*"
     )
-    
+
     keyboard = [
-        [InlineKeyboardButton("📤 Compartir enlace", url=f"https://t.me/share/url?url={referral_link}&text=¡Únete a LinkForge!")],
-        [InlineKeyboardButton("🏠 Volver al inicio", callback_data="back_to_start")]
+        [InlineKeyboardButton("📤 Compartir enlace", url=f"https://t.me/share/url?url={referral_link}&text=¡Únete a LinkForge! 🚀 Gana reputación mientras ayudas a otros!")],
+        [InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]
     ]
-    
+
     await update.message.reply_text(
         text,
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -40,11 +44,32 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if args and args[0].startswith('ref_'):
         referrer_id = int(args[0][4:])
         user_id = update.effective_user.id
-        
+
         # Verificar que no es el mismo usuario
         if user_id == referrer_id:
             return
-        
+
+        # Verificar que el usuario no existe ya (para evitar dar reputación múltiple)
+        from database.database import get_user
+        existing_user = get_user(user_id)
+        if existing_user:
+            # Ya existe, no dar recompensa de nuevo
+            return
+
         # Dar reputación al referente
         add_reputation(referrer_id, 50)
-        logger.info(f"Referido: {user_id} -> {referrer_id}")
+        logger.info(f"✅ Referido exitoso: {user_id} -> {referrer_id}")
+
+        # Notificar al referente (opcional)
+        try:
+            await context.bot.send_message(
+                chat_id=referrer_id,
+                text=f"🎉 **¡Alguien se unió por tu enlace!**\n\n"
+                     f"👤 Nuevo usuario: {update.effective_user.first_name or 'Alguien'}\n"
+                     f"🎁 +50 reputación añadida a tu cuenta.\n\n"
+                     f"📊 Usa el botón 'Invitar Amigos' para ver tu enlace personal.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Ver panel", callback_data="back_to_start")]]),
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Error notificando al referente {referrer_id}: {e}")
