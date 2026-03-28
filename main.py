@@ -21,12 +21,14 @@ WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
 # IMPORTAR HANDLERS
 # ===========================================
 from handlers.start import start, button_handler
-from handlers.link import register, confirm_replace_link, cancel_register
+from handlers.link import register, confirm_replace_link, cancel_register, confirm_add_link
 from handlers.ranking import ranking, ranking_button_handler
 from handlers.reputation import earn_reputation, visit_link, more_links
 from handlers.referral import referral, process_referral
 from handlers.admin import admin_panel, add_reputation_start, add_reputation_get_user, add_reputation_amount, cancel
-from handlers.vip import vip_menu, buy_vip
+from handlers.vip import (
+    vip_menu, buy_vip, check_payment, check_payment_retry, confirm_payment_command
+)
 
 # Estados para conversación
 WAITING_USER_ID, WAITING_REPUTATION = range(2)
@@ -36,28 +38,47 @@ WAITING_USER_ID, WAITING_REPUTATION = range(2)
 # ===========================================
 telegram_app = Application.builder().token(TOKEN).build()
 
-# Handlers de comandos
+# ===========================================
+# HANDLERS DE COMANDOS
+# ===========================================
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("register", register))
 telegram_app.add_handler(CommandHandler("ranking", ranking))
 telegram_app.add_handler(CommandHandler("reputation", earn_reputation))
 telegram_app.add_handler(CommandHandler("referral", referral))
 telegram_app.add_handler(CommandHandler("vip", vip_menu))
+telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))  # Nuevo comando admin
 
 # Handler para referidos (sin comando, desde el enlace)
 telegram_app.add_handler(CommandHandler("start", process_referral))
 
-# Handlers de callbacks
+# ===========================================
+# HANDLERS DE CALLBACKS
+# ===========================================
+# Botones principales
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_menu|admin_panel|back_to_start|my_link|change_link|renew_link|add_link_vip)$"))
+
+# Ranking
 telegram_app.add_handler(CallbackQueryHandler(ranking_button_handler, pattern="^(refresh_ranking|back_to_start)$"))
+
+# Reputación
 telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^visit_link_"))
 telegram_app.add_handler(CallbackQueryHandler(more_links, pattern="^more_links$"))
+
+# Links
 telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
+telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
 telegram_app.add_handler(CallbackQueryHandler(cancel_register, pattern="^cancel_register$"))
+
+# VIP
 telegram_app.add_handler(CallbackQueryHandler(vip_menu, pattern="^vip_menu$"))
 telegram_app.add_handler(CallbackQueryHandler(buy_vip, pattern="^buy_vip_"))
+telegram_app.add_handler(CallbackQueryHandler(check_payment, pattern="^check_payment$"))
+telegram_app.add_handler(CallbackQueryHandler(check_payment_retry, pattern="^check_payment_retry$"))
 
-# Conversation handlers para admin
+# ===========================================
+# CONVERSATION HANDLERS PARA ADMIN
+# ===========================================
 admin_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_reputation_start, pattern="^admin_add_reputation$")],
     states={
@@ -84,20 +105,20 @@ async def check_expiring_links():
     """Revisa links que expiran pronto y envía notificaciones"""
     try:
         from database.database import get_expiring_links, get_user
-        
+
         # Horas antes de expirar para notificar
         checkpoints = [48, 24, 15, 10, 5, 2, 1]
-        
+
         for hours in checkpoints:
             expiring_links = get_expiring_links(hours)
-            
+
             for link in expiring_links:
                 user_id = link["user_id"]
                 user = get_user(user_id)
-                
+
                 if not user:
                     continue
-                
+
                 # Mensaje según horas restantes
                 if hours == 48:
                     message = (
@@ -119,7 +140,7 @@ async def check_expiring_links():
                         f"🔗 `{link['url']}`\n\n"
                         f"¡Asegura tu reputación con VIP!"
                     )
-                
+
                 try:
                     await telegram_app.bot.send_message(
                         chat_id=user_id,
@@ -129,9 +150,33 @@ async def check_expiring_links():
                     logger.info(f"✅ Notificación enviada a {user_id}: expira en {hours}h")
                 except Exception as e:
                     logger.error(f"❌ Error enviando notificación a {user_id}: {e}")
-                    
+
     except Exception as e:
         logger.error(f"❌ Error en check_expiring_links: {e}")
+
+# ===========================================
+# FUNCIONES PARA PAGOS AUTOMÁTICOS
+# ===========================================
+async def check_pending_payments():
+    """Revisa pagos pendientes y verifica si fueron completados"""
+    try:
+        from database.database import get_pending_payments, confirm_payment, activate_vip
+        from handlers.vip import VIP_PLANS, TRX_PER_USD, CRYPTO_ADDRESSES
+
+        pending_payments = get_pending_payments()
+        results = []
+
+        for payment in pending_payments:
+            tx_hash = payment["tx_hash"]
+            # Por ahora, la verificación automática requiere integración con TronGrid
+            # Para el MVP, se confirma manualmente por admin
+            # En producción, aquí iría la llamada a TronGrid API
+            pass
+
+        return results
+    except Exception as e:
+        logger.error(f"❌ Error en check_pending_payments: {e}")
+        return []
 
 # ===========================================
 # ENDPOINTS DE API
@@ -157,12 +202,22 @@ async def health():
 
 @app.get("/check_expiring")
 async def trigger_expiring_check():
-    """Endpoint para que cron-job.org active las notificaciones"""
+    """Endpoint para que cron-job.org active las notificaciones de expiración"""
     try:
         await check_expiring_links()
-        return {"status": "ok", "message": "Notificaciones procesadas"}
+        return {"status": "ok", "message": "Notificaciones de expiración procesadas"}
     except Exception as e:
         logger.error(f"❌ Error en /check_expiring: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.get("/check_payments")
+async def trigger_payment_check():
+    """Endpoint para que cron-job.org verifique pagos pendientes"""
+    try:
+        results = await check_pending_payments()
+        return {"status": "ok", "message": f"Pagos verificados: {len(results)}", "results": results}
+    except Exception as e:
+        logger.error(f"❌ Error en /check_payments: {e}")
         return {"status": "error", "message": str(e)}
 
 # ===========================================
