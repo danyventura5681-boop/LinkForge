@@ -451,6 +451,69 @@ def confirm_payment(tx_hash: str):
     return payment
 
 # ===========================================
+# FUNCIONES ADICIONALES PARA PAGOS
+# ===========================================
+
+def get_payment_by_hash(tx_hash: str):
+    """Obtiene un pago por su hash/código."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM payments 
+        WHERE tx_hash = ?
+    """, (tx_hash,))
+    payment = cursor.fetchone()
+    conn.close()
+    return payment
+
+def get_pending_payments():
+    """Obtiene todos los pagos pendientes de verificación."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM payments 
+        WHERE status = 'pending' 
+        ORDER BY created_at ASC
+    """)
+    payments = cursor.fetchall()
+    conn.close()
+    return payments
+
+def get_payment_by_user(user_id: int, status: str = None):
+    """Obtiene los pagos de un usuario específico."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    if status:
+        cursor.execute("""
+            SELECT * FROM payments 
+            WHERE user_id = ? AND status = ?
+            ORDER BY created_at DESC
+        """, (user_id, status))
+    else:
+        cursor.execute("""
+            SELECT * FROM payments 
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+        """, (user_id,))
+    
+    payments = cursor.fetchall()
+    conn.close()
+    return payments
+
+def update_payment_status(tx_hash: str, status: str):
+    """Actualiza el estado de un pago."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE payments 
+        SET status = ?, confirmed_at = CURRENT_TIMESTAMP
+        WHERE tx_hash = ?
+    """, (status, tx_hash))
+    conn.commit()
+    conn.close()
+
+# ===========================================
 # FUNCIONES DE NOTIFICACIONES
 # ===========================================
 
