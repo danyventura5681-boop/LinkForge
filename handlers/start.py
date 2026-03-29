@@ -137,6 +137,8 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Handler único para volver al menú principal desde cualquier lugar.
     Reconstruye el panel principal dinámicamente.
     """
+    logger.info("🔙 🔙 🔙 back_to_start ha sido llamado 🔙 🔙 🔙")
+    
     query = update.callback_query
     await query.answer()
 
