@@ -22,28 +22,32 @@ from handlers.link import (
 telegram_app = Application.builder().token(TOKEN).build()
 
 # ===========================================
-# HANDLER DE DEPURACIÓN (TEMPORAL)
-# ===========================================
-async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    logger.info(f"🐛🐛🐛 DEBUG: Callback recibido: {query.data} 🐛🐛🐛")
-    await query.answer()
-
-telegram_app.add_handler(CallbackQueryHandler(debug_callback))
-
-# ===========================================
-# HANDLERS NORMALES
+# HANDLERS DE COMANDOS
 # ===========================================
 telegram_app.add_handler(CommandHandler("start", start))
 
-telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+# ===========================================
+# HANDLERS DE CALLBACKS (ORDEN CORRECTO)
+# ===========================================
+# Primero el handler específico para volver
+telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
+
+# Luego los handlers específicos de links
 telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
 telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern="^cancel_register$"))
-telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
 
+# Finalmente el handler general de botones
+telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+
+# ===========================================
+# HANDLERS DE MENSAJES
+# ===========================================
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
 
+# ===========================================
+# INICIAR BOT CON POLLING
+# ===========================================
 async def main():
     await telegram_app.initialize()
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
