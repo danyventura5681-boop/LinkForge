@@ -47,7 +47,7 @@ def format_expiration_date(expires_at):
 
 async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de registro de link (modo conversación)."""
-    logger.info("🔵 register_start: Iniciando registro de link")
+    logger.info("🔵🔵🔵 register_start EJECUTADO 🔵🔵🔵")
     
     text = (
         "📝 **Envíame el link que quieres promocionar**\n\n"
@@ -73,14 +73,16 @@ async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     context.user_data['waiting_for_link'] = True
-    logger.info("🔵 register_start: waiting_for_link activado")
+    logger.info("🔵 register_start: waiting_for_link = True")
 
 async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Procesa el link enviado por el usuario en modo conversación."""
-    logger.info(f"🔵 process_link_message: Mensaje recibido: {update.message.text}")
+    logger.info("🔵🔵🔵🔵 process_link_message EJECUTADO 🔵🔵🔵🔵")
+    logger.info(f"📨 Mensaje recibido: {update.message.text}")
+    logger.info(f"📨 waiting_for_link = {context.user_data.get('waiting_for_link')}")
     
     if not context.user_data.get('waiting_for_link'):
-        logger.info("⚠️ process_link_message: waiting_for_link = False, ignorando")
+        logger.info("⚠️ waiting_for_link = False, ignorando mensaje")
         return
 
     user = update.effective_user
