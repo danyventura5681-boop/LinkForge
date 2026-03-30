@@ -10,12 +10,10 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
+    logger.info(f"👥 referral: Usuario {username} solicitó su enlace de referido")
 
     bot_username = (await context.bot.get_me()).username
     referral_link = f"https://t.me/{bot_username}?start=ref_{telegram_id}"
-
-    # Obtener estadísticas de referidos (si quieres implementar después)
-    # total_referrals = get_referral_count(telegram_id)
 
     text = (
         f"👥 **Invita amigos y gana reputación** 👥\n\n"
@@ -29,7 +27,7 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("📤 Compartir enlace", url=f"https://t.me/share/url?url={referral_link}&text=¡Únete a LinkForge! 🚀 Gana reputación mientras ayudas a otros!")],
-        [InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]
+        [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
     ]
 
     await update.message.reply_text(
@@ -37,30 +35,35 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+    logger.info(f"👥 Enlace de referido mostrado para {username}")
 
 async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Procesa cuando un usuario llega por enlace de referido."""
     args = context.args
+    logger.info(f"🔗 process_referral: Args recibidos: {args}")
+    
     if args and args[0].startswith('ref_'):
         referrer_id = int(args[0][4:])
         user_id = update.effective_user.id
+        logger.info(f"🔗 Referido: user {user_id} vino por enlace de {referrer_id}")
 
         # Verificar que no es el mismo usuario
         if user_id == referrer_id:
+            logger.info("⚠️ Usuario intentó referirse a sí mismo")
             return
 
         # Verificar que el usuario no existe ya (para evitar dar reputación múltiple)
         from database.database import get_user
         existing_user = get_user(user_id)
         if existing_user:
-            # Ya existe, no dar recompensa de nuevo
+            logger.info(f"⚠️ Usuario {user_id} ya existe, no se da recompensa")
             return
 
         # Dar reputación al referente
         add_reputation(referrer_id, 50)
-        logger.info(f"✅ Referido exitoso: {user_id} -> {referrer_id}")
+        logger.info(f"✅ Referido exitoso: {user_id} -> {referrer_id}, +50 reputación")
 
-        # Notificar al referente (opcional)
+        # Notificar al referente
         try:
             await context.bot.send_message(
                 chat_id=referrer_id,
@@ -68,8 +71,9 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
                      f"👤 Nuevo usuario: {update.effective_user.first_name or 'Alguien'}\n"
                      f"🎁 +50 reputación añadida a tu cuenta.\n\n"
                      f"📊 Usa el botón 'Invitar Amigos' para ver tu enlace personal.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Ver panel", callback_data="back_to_start")]]),
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Ver panel", callback_data="volver_menu")]]),
                 parse_mode='Markdown'
             )
+            logger.info(f"✅ Notificación enviada al referente {referrer_id}")
         except Exception as e:
-            logger.error(f"Error notificando al referente {referrer_id}: {e}")
+            logger.error(f"❌ Error notificando al referente {referrer_id}: {e}")
