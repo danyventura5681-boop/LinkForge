@@ -56,6 +56,7 @@ async def vip_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra el menú de planes VIP."""
     user_id = update.effective_user.id
     user = get_user(user_id)
+    logger.info(f"⭐ vip_menu: Usuario {user_id} solicitó planes VIP")
 
     current_vip = user.get("vip_level", 0) if user else 0
     vip_expires = user.get("vip_expires_at") if user else None
@@ -98,13 +99,14 @@ async def vip_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if current_vip > 0:
         text += f"\n📌 **Tus links activos:** {len(get_user_links(user_id))}/{3 if current_vip > 0 else 1}"
 
-    keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")])
+    keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")])
 
     await update.message.reply_text(
         text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+    logger.info(f"⭐ Menú VIP mostrado para usuario {user_id}")
 
 async def buy_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra instrucciones de pago para VIP con TRX."""
@@ -113,6 +115,7 @@ async def buy_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     level = int(query.data.split("_")[2])
     plan = VIP_PLANS.get(level)
+    logger.info(f"💰 buy_vip: Usuario {query.from_user.id} comprando {plan['name'] if plan else 'plan inválido'}")
 
     if not plan:
         await query.edit_message_text(
@@ -172,6 +175,7 @@ async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verifica manualmente si un pago pendiente fue completado"""
     query = update.callback_query
     await query.answer()
+    logger.info(f"🔄 check_payment: Usuario {query.from_user.id} verificando pago")
 
     user_id = query.from_user.id
     pending_vip = context.user_data.get('pending_vip')
@@ -218,6 +222,7 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Reintenta verificar el pago pendiente"""
     query = update.callback_query
     await query.answer()
+    logger.info(f"🔄 check_payment_retry: Usuario {query.from_user.id} reintentando verificación")
 
     user_id = query.from_user.id
     pending_vip = context.user_data.get('pending_vip')
@@ -242,7 +247,7 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"🎁 +{plan['reputation']} reputación\n"
             f"⏳ {plan['days']} días de promoción\n\n"
             f"Usa el botón para ver tu nuevo estado.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="back_to_start")]]),
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="volver_menu")]]),
             parse_mode='Markdown'
         )
         context.user_data.pop('pending_vip', None)
@@ -268,7 +273,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     if user_id != 5057900537:
         await update.message.reply_text(
             "⛔ Solo administradores pueden usar este comando.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
         return
 
@@ -283,6 +288,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
         return
 
     payment_ref = args[0]
+    logger.info(f"🔧 confirm_payment_command: Admin confirmando pago {payment_ref}")
 
     # Buscar en la base de datos por código de pago
     from database.database import get_payment_by_hash
@@ -317,7 +323,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                                  f"🎁 +{plan['reputation']} reputación\n"
                                  f"⏳ {plan['days']} días de promoción\n\n"
                                  f"Usa el botón para ver tu nuevo estado.",
-                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="back_to_start")]]),
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="volver_menu")]]),
                             parse_mode='Markdown'
                         )
                     except Exception as e:
@@ -330,6 +336,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     if payment and payment.get("status") == "pending":
         plan = VIP_PLANS.get(payment["vip_level"])
         if plan:
+            from database.database import confirm_payment
             confirm_payment(payment_ref)
             activate_vip(payment["user_id"], payment["vip_level"], plan['days'], plan['reputation'])
 
@@ -350,7 +357,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                          f"🎁 +{plan['reputation']} reputación\n"
                          f"⏳ {plan['days']} días de promoción\n\n"
                          f"Usa el botón para ver tu nuevo estado.",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="back_to_start")]]),
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="volver_menu")]]),
                     parse_mode='Markdown'
                 )
             except Exception as e:
