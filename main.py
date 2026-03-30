@@ -2,10 +2,9 @@ import os
 import logging
 from fastapi import FastAPI, Request, Response
 from telegram import Update
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 import uvicorn
 
-# Configuración
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -17,16 +16,19 @@ PORT = int(os.environ.get("PORT", 8080))
 WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
 
 # ===========================================
-# HANDLER SIMPLE
+# IMPORTAR HANDLERS
 # ===========================================
-async def start(update: Update, context):
-    await update.message.reply_text("✅ LinkForge funcionando correctamente!")
+from handlers.start import start, button_handler, back_to_start
 
 # ===========================================
 # CREAR APP DE TELEGRAM
 # ===========================================
 telegram_app = Application.builder().token(TOKEN).build()
+
+# Handlers
 telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
 
 # ===========================================
 # WEBHOOK
