@@ -62,8 +62,9 @@ telegram_app.add_handler(CommandHandler("start", process_referral))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
 
 # ===========================================
-# HANDLERS DE CALLBACKS
+# HANDLERS DE CALLBACKS (PRIMERO LOS NORMALES)
 # ===========================================
+
 # Botones principales del menú
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
 
@@ -89,7 +90,10 @@ telegram_app.add_handler(CallbackQueryHandler(check_payment_retry, pattern="^che
 telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
 telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_users$"))
 
-# Admin - Conversation handlers
+# ===========================================
+# CONVERSATION HANDLERS (DESPUÉS DE LOS NORMALES)
+# ===========================================
+
 admin_add_reputation_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_reputation_start, pattern="^admin_add_reputation$")],
     states={
@@ -128,7 +132,7 @@ admin_unban_user_conv = ConversationHandler(
 telegram_app.add_handler(admin_unban_user_conv)
 
 # ===========================================
-# HANDLER ÚNICO PARA VOLVER AL MENÚ PRINCIPAL
+# HANDLER ÚNICO PARA VOLVER AL MENÚ PRINCIPAL (AL FINAL)
 # ===========================================
 telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
 
