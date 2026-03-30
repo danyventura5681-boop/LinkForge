@@ -94,38 +94,46 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los botones del menú principal"""
     query = update.callback_query
+    logger.info(f"🟢 button_handler recibió: {query.data}")
     await query.answer()
 
     data = query.data
 
     if data == "register_link":
+        logger.info("🔵 Iniciando registro de link...")
         from handlers.link import register_start
         await register_start(update, context)
 
     elif data == "show_ranking":
+        logger.info("🔵 Mostrando ranking...")
         from handlers.ranking import ranking
         await ranking(update, context)
 
     elif data == "earn_reputation":
+        logger.info("🔵 Mostrando ganar reputación...")
         from handlers.reputation import earn_reputation
         await earn_reputation(update, context)
 
     elif data == "referral":
+        logger.info("🔵 Mostrando referidos...")
         from handlers.referral import referral
         await referral(update, context)
 
     elif data == "vip_info":
+        logger.info("🔵 Mostrando VIP...")
         from handlers.vip import vip_menu
         await vip_menu(update, context)
 
     elif data == "admin_panel":
+        logger.info("🔵 Mostrando panel admin...")
         from handlers.admin import admin_panel
         await admin_panel(update, context)
 
     else:
+        logger.info(f"🟡 Botón no reconocido: {data}")
         await query.edit_message_text(
             "❌ Función en desarrollo. Pronto estará disponible.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
 
 # ===========================================
