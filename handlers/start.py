@@ -49,7 +49,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reputation = existing_user["reputation"] if existing_user["reputation"] else 0
         rank = get_user_rank(telegram_id) or "?"
         links = get_user_links(telegram_id)
-        vip_level = existing_user.get("vip_level", 0)
+        vip_level = existing_user["vip_level"] if existing_user["vip_level"] else 0
 
     main_link = links[0] if links else None
     if main_link and main_link.get("expires_at"):
@@ -146,7 +146,7 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Reconstruye el panel principal dinámicamente.
     """
     logger.info("🔙 🔙 🔙 back_to_start ha sido llamado 🔙 🔙 🔙")
-    
+
     query = update.callback_query
     await query.answer()
 
@@ -161,7 +161,7 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reputation = existing_user["reputation"] or 0
     rank = get_user_rank(user_id) or "?"
     links = get_user_links(user_id)
-    vip_level = existing_user.get("vip_level", 0)
+    vip_level = existing_user["vip_level"] if existing_user["vip_level"] else 0
 
     main_link = links[0] if links else None
     if main_link and main_link.get("expires_at"):
