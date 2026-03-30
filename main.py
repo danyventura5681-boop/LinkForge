@@ -130,7 +130,7 @@ telegram_app.add_handler(admin_unban_user_conv)
 # ===========================================
 # HANDLER ÚNICO PARA VOLVER AL MENÚ PRINCIPAL
 # ===========================================
-telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^back_to_start$"))
+telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
 
 # ===========================================
 # WEBHOOK Y SERVIDOR
