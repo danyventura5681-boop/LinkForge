@@ -27,17 +27,17 @@ telegram_app = Application.builder().token(TOKEN).build()
 telegram_app.add_handler(CommandHandler("start", start))
 
 # ===========================================
-# HANDLERS DE CALLBACKS (ORDEN CORRECTO)
+# HANDLERS DE CALLBACKS
 # ===========================================
-# Primero el handler específico para volver (patrón más flexible)
+# Handler para volver (patrón flexible)
 telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="volver_menu"))
 
-# Luego los handlers específicos de links
+# Handlers específicos de links
 telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
 telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern="^cancel_register$"))
 
-# Finalmente el handler general de botones
+# Handler general de botones
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
 
 # ===========================================
