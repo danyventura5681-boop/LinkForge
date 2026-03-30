@@ -2,7 +2,7 @@ import os
 import logging
 from fastapi import FastAPI, Request, Response
 from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 import uvicorn
 
 logging.basicConfig(level=logging.INFO)
@@ -19,19 +19,42 @@ WEBHOOK_URL = os.environ.get("RENDER_EXTERNAL_URL", f"https://localhost:{PORT}")
 # IMPORTAR HANDLERS
 # ===========================================
 from handlers.start import start, button_handler, back_to_start
+from handlers.link import (
+    register_start, process_link_message, confirm_replace_link, 
+    confirm_add_link, cancel_register_callback
+)
 
 # ===========================================
 # CREAR APP DE TELEGRAM
 # ===========================================
 telegram_app = Application.builder().token(TOKEN).build()
 
-# Handlers
+# ===========================================
+# HANDLERS DE COMANDOS
+# ===========================================
 telegram_app.add_handler(CommandHandler("start", start))
+
+# ===========================================
+# HANDLERS DE MENSAJES (MODO CONVERSACIÓN)
+# ===========================================
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
+
+# ===========================================
+# HANDLERS DE CALLBACKS
+# ===========================================
+# Botones principales del menú
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+
+# Links
+telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
+telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
+telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern="^cancel_register$"))
+
+# Handler de vuelta
 telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
 
 # ===========================================
-# WEBHOOK
+# WEBHOOK Y SERVIDOR
 # ===========================================
 async def setup_webhook():
     await telegram_app.initialize()
