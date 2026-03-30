@@ -22,23 +22,27 @@ from handlers.link import (
 telegram_app = Application.builder().token(TOKEN).build()
 
 # ===========================================
-# HANDLERS DE COMANDOS
+# HANDLER DE COMANDOS
 # ===========================================
 telegram_app.add_handler(CommandHandler("start", start))
 
 # ===========================================
-# HANDLERS DE CALLBACKS
+# HANDLER GENÉRICO TEMPORAL (captura TODOS los callbacks)
 # ===========================================
-# Handler para volver (patrón flexible)
-telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="volver_menu"))
+async def catch_all_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    logger.info(f"📣📣📣 TODOS LOS CALLBACKS: {query.data} 📣📣📣")
+    await query.answer()
+    
+    # Si es volver_menu, ejecutar back_to_start
+    if query.data == "volver_menu":
+        logger.info("🎯 Ejecutando back_to_start manualmente")
+        await back_to_start(update, context)
+    else:
+        # Para otros botones, pasar al button_handler
+        await button_handler(update, context)
 
-# Handlers específicos de links
-telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
-telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
-telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern="^cancel_register$"))
-
-# Handler general de botones
-telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+telegram_app.add_handler(CallbackQueryHandler(catch_all_callbacks))
 
 # ===========================================
 # HANDLERS DE MENSAJES
