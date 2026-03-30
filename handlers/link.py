@@ -47,14 +47,16 @@ def format_expiration_date(expires_at):
 
 async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de registro de link (modo conversación)."""
+    logger.info("🔵 register_start: Iniciando registro de link")
+    
     text = (
         "📝 **Envíame el link que quieres promocionar**\n\n"
         "Ejemplo: `https://tusitio.com`\n\n"
         "Recuerda incluir `http://` o `https://`"
     )
-    
-    keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]]
-    
+
+    keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
+
     if update.callback_query:
         query = update.callback_query
         await query.answer()
@@ -69,22 +71,28 @@ async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-    
+
     context.user_data['waiting_for_link'] = True
+    logger.info("🔵 register_start: waiting_for_link activado")
 
 async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Procesa el link enviado por el usuario en modo conversación."""
+    logger.info(f"🔵 process_link_message: Mensaje recibido: {update.message.text}")
+    
     if not context.user_data.get('waiting_for_link'):
+        logger.info("⚠️ process_link_message: waiting_for_link = False, ignorando")
         return
 
     user = update.effective_user
     telegram_id = user.id
     url = update.message.text.strip()
-    
-    keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]]
+    logger.info(f"🔵 Procesando link: {url}")
+
+    keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
 
     # Validar URL
     if not is_valid_url(url):
+        logger.info(f"❌ URL no válida: {url}")
         await update.message.reply_text(
             "❌ **URL no válida.**\n\n"
             "Asegúrate de incluir `http://` o `https://`.\n"
@@ -98,19 +106,22 @@ async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYP
     db_user = get_user(telegram_id)
     days = get_promotion_days(db_user)
     vip_level = db_user.get("vip_level", 0) if db_user else 0
+    logger.info(f"🔵 Usuario VIP nivel: {vip_level}, días de promoción: {days}")
 
     # Verificar si el usuario ya tiene links activos
     existing_links = get_user_links(telegram_id)
     max_links = 3 if vip_level > 0 else 1
+    logger.info(f"🔵 Links activos: {len(existing_links)}/{max_links}")
 
     if existing_links and len(existing_links) >= max_links:
+        logger.info(f"⚠️ Límite de links alcanzado: {len(existing_links)}/{max_links}")
         await update.message.reply_text(
             f"⚠️ **Límite de links alcanzado.**\n\n"
             f"📌 Links activos: {len(existing_links)}/{max_links}\n\n"
             f"Para tener más links, actualiza a VIP con el botón de abajo.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
-                [InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]
+                [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
             ]),
             parse_mode='Markdown'
         )
@@ -119,6 +130,7 @@ async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Registrar nuevo link
     register_link(telegram_id, url, link_number=1, days=days)
+    logger.info(f"✅ Link registrado: {url}")
 
     # Calcular fecha de expiración
     expires_at = datetime.utcnow() + timedelta(days=days)
@@ -131,11 +143,12 @@ async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYP
         f"⏳ Promoción activa por **{days} días**{vip_text}\n"
         f"📅 Expira: {expires_at.strftime('%d/%m/%Y %H:%M')} UTC\n"
         f"⏰ Tiempo restante: {expires_formatted}",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="back_to_start")]]),
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="volver_menu")]]),
         parse_mode='Markdown'
     )
 
     context.user_data['waiting_for_link'] = False
+    logger.info("🔵 waiting_for_link desactivado")
 
 # ===========================================
 # FUNCIONES DE COMPATIBILIDAD
@@ -151,7 +164,7 @@ async def confirm_replace_link(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()
     await query.edit_message_text(
         "✏️ Función de reemplazo en desarrollo.\n\nPronto disponible.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
     )
 
 async def confirm_add_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -160,7 +173,7 @@ async def confirm_add_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await query.edit_message_text(
         "➕ Función de agregar link en desarrollo.\n\nPronto disponible.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
     )
 
 async def cancel_register_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -171,5 +184,5 @@ async def cancel_register_callback(update: Update, context: ContextTypes.DEFAULT
     context.user_data.pop('waiting_for_link', None)
     await query.edit_message_text(
         "❌ Registro de link cancelado.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
     )
