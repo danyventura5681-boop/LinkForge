@@ -8,17 +8,19 @@ logger = logging.getLogger(__name__)
 async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra los top 5 links para ganar reputación."""
     user_id = update.effective_user.id
+    logger.info(f"🎁 earn_reputation: Usuario {user_id} solicitó ganar reputación")
 
     # Obtener top 10 usuarios (excluyendo al propio usuario)
     top_users = get_top_users(limit=10)
     available_users = [u for u in top_users if u["telegram_id"] != user_id][:5]
 
     if not available_users:
+        logger.info("🎁 No hay usuarios disponibles")
         await update.message.reply_text(
             "🎁 **No hay usuarios disponibles**\n\n"
             "Vuelve más tarde cuando haya más usuarios registrados.\n\n"
             "💡 Consejo: Invita amigos con el botón 'Invitar Amigos' para aumentar la comunidad.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]]),
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]),
             parse_mode='Markdown'
         )
         return
@@ -40,13 +42,14 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )])
 
     keyboard.append([InlineKeyboardButton("🔄 Más links", callback_data="more_links")])
-    keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")])
+    keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")])
 
     await update.message.reply_text(
         text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+    logger.info(f"🎁 Mostrados {len(available_users)} usuarios disponibles")
 
 async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Registra la visita a un link y da reputación."""
@@ -55,26 +58,30 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
     target_user_id = int(query.data.split("_")[2])
+    logger.info(f"🔗 visit_link: Usuario {user_id} visitó link de {target_user_id}")
 
     # Verificar que no se visite a sí mismo
     if user_id == target_user_id:
+        logger.info("⚠️ Usuario intentó visitar su propio link")
         await query.edit_message_text(
             "❌ No puedes visitar tu propio link.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
         return
 
     # Obtener información del usuario objetivo
     target_user = get_user(target_user_id)
     if not target_user:
+        logger.info(f"❌ Usuario objetivo {target_user_id} no encontrado")
         await query.edit_message_text(
             "❌ Usuario no encontrado.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]])
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
         return
 
     # Dar reputación al usuario que hizo clic
     add_reputation(user_id, 5)
+    logger.info(f"✅ +5 reputación para usuario {user_id}")
 
     username = target_user["username"] or f"Usuario_{target_user_id}"
 
@@ -91,7 +98,7 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🎁 Sigue visitando links para ganar más puntos.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🎁 Ver más links", callback_data="more_links")],
-            [InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]
+            [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
         ]),
         parse_mode='Markdown'
     )
@@ -99,5 +106,6 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def more_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra más links disponibles."""
     query = update.callback_query
+    logger.info("🔄 more_links: Mostrando más links")
     await query.answer()
     await earn_reputation(update, context)
