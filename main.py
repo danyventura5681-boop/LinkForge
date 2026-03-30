@@ -29,8 +29,8 @@ telegram_app.add_handler(CommandHandler("start", start))
 # ===========================================
 # HANDLERS DE CALLBACKS (ORDEN CORRECTO)
 # ===========================================
-# Primero el handler específico para volver
-telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
+# Primero el handler específico para volver (patrón más flexible)
+telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="volver_menu"))
 
 # Luego los handlers específicos de links
 telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
