@@ -8,15 +8,17 @@ logger = logging.getLogger(__name__)
 async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra el top de usuarios por reputación."""
     user_id = update.effective_user.id
+    logger.info(f"📊 ranking: Mostrando ranking para usuario {user_id}")
 
     # Obtener top 10 usuarios
     top_users = get_top_users(limit=10)
 
     if not top_users:
+        logger.info("📊 ranking: Ranking vacío")
         await update.message.reply_text(
             "📊 **Ranking vacío**\n\n"
             "Sé el primero en registrar un link usando el botón 'Registrar Link'.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]]),
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]),
             parse_mode='Markdown'
         )
         return
@@ -41,7 +43,7 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("🔄 Actualizar", callback_data="refresh_ranking")],
-        [InlineKeyboardButton("◀️ Volver al Menú", callback_data="back_to_start")]
+        [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
     ]
 
     await update.message.reply_text(
@@ -49,12 +51,14 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+    logger.info("📊 ranking: Ranking mostrado correctamente")
 
 async def ranking_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja botones del ranking"""
     query = update.callback_query
+    logger.info(f"🔄 ranking_button_handler: {query.data}")
     await query.answer()
 
     if query.data == "refresh_ranking":
-        # Recargar ranking actualizado
+        logger.info("🔄 Actualizando ranking...")
         await ranking(update, context)
