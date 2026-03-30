@@ -35,12 +35,7 @@ telegram_app = Application.builder().token(TOKEN).build()
 telegram_app.add_handler(CommandHandler("start", start))
 
 # ===========================================
-# HANDLERS DE MENSAJES (MODO CONVERSACIÓN)
-# ===========================================
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
-
-# ===========================================
-# HANDLERS DE CALLBACKS
+# HANDLERS DE CALLBACKS (PRIMERO)
 # ===========================================
 # Botones principales del menú
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
@@ -52,6 +47,12 @@ telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern=
 
 # Handler de vuelta
 telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
+
+# ===========================================
+# HANDLERS DE MENSAJES (DESPUÉS DE LOS CALLBACKS)
+# ===========================================
+# Este handler procesa los mensajes de texto cuando el bot está esperando un link
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
 
 # ===========================================
 # WEBHOOK Y SERVIDOR
