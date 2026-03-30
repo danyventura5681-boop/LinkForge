@@ -20,7 +20,8 @@ def is_valid_url(url: str) -> bool:
     return re.match(URL_PATTERN, url) is not None
 
 def get_promotion_days(user):
-    if user and user.get("vip_level", 0) > 0:
+    """Determina los días de promoción según el nivel VIP del usuario"""
+    if user and user["vip_level"] > 0:
         return 30
     return 10
 
@@ -106,8 +107,15 @@ async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Obtener usuario para verificar nivel VIP
     db_user = get_user(telegram_id)
-    days = get_promotion_days(db_user)
-    vip_level = db_user.get("vip_level", 0) if db_user else 0
+    
+    # Manejo seguro de datos
+    if db_user:
+        vip_level = db_user["vip_level"] if "vip_level" in db_user.keys() else 0
+        days = 30 if vip_level > 0 else 10
+    else:
+        vip_level = 0
+        days = 10
+    
     logger.info(f"🔵 Usuario VIP nivel: {vip_level}, días de promoción: {days}")
 
     # Verificar si el usuario ya tiene links activos
