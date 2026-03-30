@@ -1,5 +1,6 @@
 import os
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 
@@ -46,14 +47,19 @@ telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process
 # ===========================================
 # INICIAR BOT CON POLLING
 # ===========================================
-if __name__ == "__main__":
-    logger.info("🚀 LinkForge iniciando con POLLING...")
-    # Eliminar webhook si existe para evitar conflictos
-    import asyncio
-    async def delete_webhook():
-        await telegram_app.initialize()
-        await telegram_app.bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook eliminado")
-    asyncio.run(delete_webhook())
+async def main():
+    # Eliminar webhook si existe
+    await telegram_app.initialize()
+    await telegram_app.bot.delete_webhook(drop_pending_updates=True)
+    logger.info("✅ Webhook eliminado")
     
-    telegram_app.run_polling()
+    # Iniciar polling
+    logger.info("🚀 LinkForge iniciando con POLLING...")
+    await telegram_app.start()
+    await telegram_app.updater.start_polling()
+    
+    # Mantener el bot corriendo
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    asyncio.run(main())
