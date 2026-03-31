@@ -3,7 +3,7 @@ import hashlib
 import time
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from database.database import get_user, activate_vip, register_payment, get_user_links
 from config import VIP_PLANS, TRX_ADDRESS, TRX_PER_USD
 
@@ -18,6 +18,9 @@ CRYPTO_ADDRESSES = {
     "BNB": "0x1526Fa97f7E7d8A0AB76F3fb94F97A3E1281cA81",
     "SOL": "9ncG6PPVVPueqELv3rC8JeNUbnkbhdQ9E522BDJqZvF"
 }
+
+# Estados para conversación de pago manual
+WAITING_PAYMENT_AMOUNT, WAITING_PAYMENT_ADDRESS, WAITING_PAYMENT_TX = range(3)
 
 def get_trx_amount(usd_amount):
     """Convierte USD a TRX según tasa fija"""
@@ -172,11 +175,12 @@ async def buy_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📝 **Tu código de pago:** `{payment_hash}`\n\n"
         f"⚠️ **Importante:** Incluye el código de pago en el **memo** de la transacción para activación automática.\n\n"
         f"✅ Una vez enviado, el bot verificará automáticamente el pago y activará tu VIP.\n"
-        f"🔄 También puedes usar el botón 'Verificar pago' para comprobar manualmente."
+        f"📌 Si no puedes incluir memo, usa el botón **'✅ Ya pagué'** para verificación manual."
     )
 
     keyboard = [
         [InlineKeyboardButton("🔄 Verificar pago", callback_data="check_payment")],
+        [InlineKeyboardButton("✅ Ya pagué (verificación manual)", callback_data="manual_payment")],
         [InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]
     ]
 
@@ -185,6 +189,117 @@ async def buy_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+
+async def manual_payment_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Inicia el proceso de verificación manual de pago."""
+    query = update.callback_query
+    await query.answer()
+    
+    pending_vip = context.user_data.get('pending_vip')
+    payment_hash = context.user_data.get('payment_hash')
+    
+    if not pending_vip or not payment_hash:
+        await query.edit_message_text(
+            "❌ No hay ninguna compra pendiente.\n\nUsa el botón 'VIP' para seleccionar un plan.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]])
+        )
+        return
+    
+    plan = VIP_PLANS.get(pending_vip)
+    expected_trx = get_trx_amount(plan['price_usd'])
+    
+    text = (
+        f"✅ **Verificación manual de pago**\n\n"
+        f"Para verificar tu pago, responde las siguientes preguntas:\n\n"
+        f"1️⃣ **¿Cuántos TRX enviaste?** (debes enviar exactamente {expected_trx} TRX)\n"
+        f"2️⃣ **¿Desde qué dirección enviaste?** (tu wallet TRX)\n"
+        f"3️⃣ **Hash de la transacción** (opcional, pero ayuda)\n\n"
+        f"Por favor, **envía el monto enviado** (ejemplo: 10):"
+    )
+    
+    await query.edit_message_text(text, parse_mode='Markdown')
+    return WAITING_PAYMENT_AMOUNT
+
+async def manual_payment_get_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Recibe el monto enviado."""
+    try:
+        amount = float(update.message.text.strip())
+        context.user_data['manual_amount'] = amount
+        await update.message.reply_text(
+            f"✅ Monto registrado: {amount} TRX\n\n"
+            f"2️⃣ **¿Desde qué dirección enviaste?** (tu wallet TRX)"
+        )
+        return WAITING_PAYMENT_ADDRESS
+    except ValueError:
+        await update.message.reply_text("❌ Ingresa un número válido (ejemplo: 10)")
+        return WAITING_PAYMENT_AMOUNT
+
+async def manual_payment_get_address(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Recibe la dirección del remitente."""
+    address = update.message.text.strip()
+    context.user_data['manual_address'] = address
+    await update.message.reply_text(
+        f"✅ Dirección registrada: `{address}`\n\n"
+        f"3️⃣ **Hash de la transacción** (opcional, escribe 'ninguno' si no lo tienes)"
+    )
+    return WAITING_PAYMENT_TX
+
+async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Recibe el hash y envía la información al admin."""
+    tx_hash = update.message.text.strip()
+    if tx_hash.lower() == 'ninguno':
+        tx_hash = "No proporcionado"
+    
+    pending_vip = context.user_data.get('pending_vip')
+    payment_hash = context.user_data.get('payment_hash')
+    amount = context.user_data.get('manual_amount')
+    address = context.user_data.get('manual_address')
+    
+    plan = VIP_PLANS.get(pending_vip)
+    expected_trx = get_trx_amount(plan['price_usd'])
+    
+    # Enviar notificación al admin
+    admin_id = 5057900537  # Tu ID
+    admin_text = (
+        f"🛡️ **Nuevo pago pendiente de verificación** 🛡️\n\n"
+        f"👤 Usuario: {update.effective_user.id}\n"
+        f"👤 Nombre: {update.effective_user.first_name}\n"
+        f"⭐ Plan: {plan['name']}\n"
+        f"💰 Monto enviado: {amount} TRX (esperado: {expected_trx} TRX)\n"
+        f"🏦 Dirección: `{address}`\n"
+        f"🔗 Hash TX: `{tx_hash}`\n"
+        f"📝 Código pago: `{payment_hash}`\n\n"
+        f"Para activar VIP, usa: `/confirmar {payment_hash}`"
+    )
+    
+    try:
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=admin_text,
+            parse_mode='Markdown'
+        )
+        await update.message.reply_text(
+            f"✅ **¡Información enviada!**\n\n"
+            f"El administrador revisará tu pago y activará tu VIP en breve.\n\n"
+            f"📝 Tu código de pago: `{payment_hash}`\n\n"
+            f"Puedes contactar a @danyvg56 si tienes alguna duda.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]),
+            parse_mode='Markdown'
+        )
+    except Exception as e:
+        logger.error(f"Error enviando notificación al admin: {e}")
+        await update.message.reply_text(
+            "❌ Error al enviar la información. Contacta a @danyvg56 directamente.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
+        )
+    
+    # Limpiar contexto
+    context.user_data.pop('pending_vip', None)
+    context.user_data.pop('payment_hash', None)
+    context.user_data.pop('manual_amount', None)
+    context.user_data.pop('manual_address', None)
+    
+    return ConversationHandler.END
 
 async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Verifica manualmente si un pago pendiente fue completado"""
