@@ -6,19 +6,25 @@ from database.database import get_user, create_user, get_user_rank, get_user_lin
 
 logger = logging.getLogger(__name__)
 
-def format_time_remaining(expires_at_str):
-    """Calcula los días y horas restantes"""
-    if not expires_at_str:
+def format_time_remaining(expires_at):
+    """Calcula los días y horas restantes (acepta datetime o string)"""
+    if not expires_at:
         return "No activo"
 
     try:
-        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        # Si es datetime, usarlo directamente
+        if isinstance(expires_at, datetime):
+            expires_dt = expires_at
+        else:
+            # Si es string, convertirlo a datetime
+            expires_dt = datetime.fromisoformat(str(expires_at).replace('Z', '+00:00'))
+
         now = datetime.utcnow()
 
-        if expires_at <= now:
+        if expires_dt <= now:
             return "⚠️ EXPIRADO"
 
-        remaining = expires_at - now
+        remaining = expires_dt - now
         days = remaining.days
         hours = remaining.seconds // 3600
 
