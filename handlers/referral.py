@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_user, add_reputation
+from database.database import get_user, add_reputation, create_user
 
 logger = logging.getLogger(__name__)
 
@@ -55,26 +55,27 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if args and args[0].startswith('ref_'):
         referrer_id = int(args[0][4:])
         user_id = update.effective_user.id
+        username = update.effective_user.username or update.effective_user.first_name or "Usuario"
         logger.info(f"🔗 Referido: user {user_id} vino por enlace de {referrer_id}")
 
         if user_id == referrer_id:
             logger.info("⚠️ Usuario intentó referirse a sí mismo")
             return
 
-        from database.database import get_user
         existing_user = get_user(user_id)
         if existing_user:
             logger.info(f"⚠️ Usuario {user_id} ya existe, no se da recompensa")
             return
 
-        add_reputation(referrer_id, 50)
-        logger.info(f"✅ Referido exitoso: {user_id} -> {referrer_id}, +50 reputación")
+        # Crear usuario con referido
+        create_user(user_id, username, referred_by=referrer_id)
+        logger.info(f"✅ Usuario {user_id} creado con referido {referrer_id}")
 
         try:
             await context.bot.send_message(
                 chat_id=referrer_id,
                 text=f"🎉 **¡Alguien se unió por tu enlace!**\n\n"
-                     f"👤 Nuevo usuario: {update.effective_user.first_name or 'Alguien'}\n"
+                     f"👤 Nuevo usuario: {username}\n"
                      f"🎁 +50 reputación añadida a tu cuenta.\n\n"
                      f"📊 Usa el botón 'Invitar Amigos' para ver tu enlace personal.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Ver panel", callback_data="volver_menu")]]),
