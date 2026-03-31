@@ -35,8 +35,8 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "🏆 **TOP 10 - Reputación** 🏆\n\n"
 
     for i, user in enumerate(top_users, 1):
-        username = user["username"] or f"Usuario_{user['telegram_id']}"
-        reputation = user["reputation"]
+        username = user.username or f"Usuario_{user.telegram_id}"
+        reputation = user.reputation
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
         text += f"{medal} **{i}. {username}** - {reputation} pts\n"
 
@@ -44,7 +44,7 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(user_id)
 
     if user and user_rank:
-        text += f"\n📌 **Tu posición:** #{user_rank} - {user['reputation']} pts"
+        text += f"\n📌 **Tu posición:** #{user_rank} - {user.reputation} pts"
     else:
         text += "\n📌 **Todavía no tienes reputación.**\nRegistra un link para comenzar."
 
