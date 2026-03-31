@@ -300,8 +300,8 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "📋 **Lista de usuarios**\n\n"
     for u in users[:20]:
-        admin_flag = "👑 " if u.get("is_admin") else ""
-        banned_flag = "🚫 " if u.get("is_banned") else ""
+        admin_flag = "👑 " if u["is_admin"] else ""
+        banned_flag = "🚫 " if u["is_banned"] else ""
         text += f"{admin_flag}{banned_flag}`{u['telegram_id']}` - {u['username'] or 'Sin nombre'} - {u['reputation']} pts\n"
 
     if len(users) > 20:
