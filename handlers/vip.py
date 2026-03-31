@@ -22,6 +22,9 @@ CRYPTO_ADDRESSES = {
 # Estados para conversación de pago manual
 WAITING_PAYMENT_AMOUNT, WAITING_PAYMENT_ADDRESS, WAITING_PAYMENT_TX = range(3)
 
+# ID del administrador fijo
+ADMIN_ID = 5057900537
+
 def get_trx_amount(usd_amount):
     """Convierte USD a TRX según tasa fija"""
     return usd_amount * TRX_PER_USD
@@ -214,10 +217,17 @@ async def manual_payment_start(update: Update, context: ContextTypes.DEFAULT_TYP
         f"1️⃣ **¿Cuántos TRX enviaste?** (debes enviar exactamente {expected_trx} TRX)\n"
         f"2️⃣ **¿Desde qué dirección enviaste?** (tu wallet TRX)\n"
         f"3️⃣ **Hash de la transacción** (opcional, pero ayuda)\n\n"
-        f"Por favor, **envía el monto enviado** (ejemplo: 10):"
+        f"📝 **Tu código de pago:** `{payment_hash}`\n\n"
+        f"Por favor, **envía el monto enviado** (ejemplo: {expected_trx}):"
     )
 
-    await query.edit_message_text(text, parse_mode='Markdown')
+    keyboard = [[InlineKeyboardButton("◀️ Cancelar", callback_data="vip_menu")]]
+
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
     return WAITING_PAYMENT_AMOUNT
 
 async def manual_payment_get_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -258,8 +268,7 @@ async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TY
     plan = VIP_PLANS.get(pending_vip)
     expected_trx = get_trx_amount(plan['price_usd'])
 
-    # Enviar notificación al admin
-    admin_id = 5057900537  # Tu ID
+    # ADMIN_ID fijo (siempre al mismo administrador)
     admin_text = (
         f"🛡️ **Nuevo pago pendiente de verificación** 🛡️\n\n"
         f"👤 Usuario: {update.effective_user.id}\n"
@@ -273,11 +282,15 @@ async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
     try:
+        # Enviar al administrador (SIEMPRE al ADMIN_ID fijo)
         await context.bot.send_message(
-            chat_id=admin_id,
+            chat_id=ADMIN_ID,
             text=admin_text,
             parse_mode='Markdown'
         )
+        logger.info(f"✅ Notificación de pago enviada al admin {ADMIN_ID}")
+        
+        # Confirmar al usuario (puede ser el mismo admin)
         await update.message.reply_text(
             f"✅ **¡Información enviada!**\n\n"
             f"El administrador revisará tu pago y activará tu VIP en breve.\n\n"
@@ -400,7 +413,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.effective_user.id
 
     # Verificar que es el admin
-    if user_id != 5057900537:
+    if user_id != ADMIN_ID:
         await update.message.reply_text(
             "⛔ Solo administradores pueden usar este comando.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
