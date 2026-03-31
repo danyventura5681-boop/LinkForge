@@ -58,9 +58,14 @@ async def vip_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = get_user(user_id)
     logger.info(f"⭐ vip_menu: Usuario {user_id} solicitó planes VIP")
 
-    current_vip = user.get("vip_level", 0) if user else 0
-    vip_expires = user.get("vip_expires_at") if user else None
-    reputation = user.get("reputation", 0) if user else 0
+    if user:
+        current_vip = user["vip_level"] if user["vip_level"] else 0
+        vip_expires = user["vip_expires_at"] if user["vip_expires_at"] else None
+        reputation = user["reputation"] if user["reputation"] else 0
+    else:
+        current_vip = 0
+        vip_expires = None
+        reputation = 0
 
     # Calcular tiempo restante de VIP
     if current_vip > 0 and vip_expires:
@@ -239,7 +244,7 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
     from database.database import get_payment_by_hash
     payment = get_payment_by_hash(payment_hash)
 
-    if payment and payment.get("status") == "confirmed":
+    if payment and payment["status"] == "confirmed":
         plan = VIP_PLANS.get(pending_vip)
         await query.edit_message_text(
             f"🎉 **¡Pago confirmado!**\n\n"
@@ -333,7 +338,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
             logger.error(f"Error procesando formato antiguo: {e}")
 
     # Si encontramos el pago en la base de datos
-    if payment and payment.get("status") == "pending":
+    if payment and payment["status"] == "pending":
         plan = VIP_PLANS.get(payment["vip_level"])
         if plan:
             from database.database import confirm_payment
@@ -364,7 +369,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                 logger.error(f"Error notificando al usuario: {e}")
         else:
             await update.message.reply_text("❌ Plan no válido en el pago.")
-    elif payment and payment.get("status") == "confirmed":
+    elif payment and payment["status"] == "confirmed":
         await update.message.reply_text("ℹ️ Este pago ya fue confirmado anteriormente.")
     else:
         await update.message.reply_text(f"❌ No se encontró ningún pago pendiente con el código: `{payment_ref}`", parse_mode='Markdown')
