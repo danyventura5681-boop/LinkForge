@@ -10,11 +10,9 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"📊 ranking: Mostrando ranking para usuario {user_id}")
 
-    # Obtener top 10 usuarios
     top_users = get_top_users(limit=10)
 
     if not top_users:
-        logger.info("📊 ranking: Ranking vacío")
         await update.message.reply_text(
             "📊 **Ranking vacío**\n\n"
             "Sé el primero en registrar un link usando el botón 'Registrar Link'.",
@@ -23,7 +21,6 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Construir mensaje
     text = "🏆 **TOP 10 - Reputación** 🏆\n\n"
 
     for i, user in enumerate(top_users, 1):
@@ -32,7 +29,6 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🔹"
         text += f"{medal} **{i}. {username}** - {reputation} pts\n"
 
-    # Posición del usuario actual
     user_rank = get_user_rank(user_id)
     user = get_user(user_id)
 
