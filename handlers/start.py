@@ -46,15 +46,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         links = []
         vip_level = 0
     else:
-        reputation = existing_user["reputation"] if existing_user["reputation"] else 0
+        reputation = existing_user.reputation if existing_user.reputation else 0
         rank = get_user_rank(telegram_id) or "?"
         links = get_user_links(telegram_id)
-        vip_level = existing_user["vip_level"] if existing_user["vip_level"] else 0
+        vip_level = existing_user.vip_level if existing_user.vip_level else 0
 
     main_link = links[0] if links else None
-    if main_link and main_link["expires_at"]:
-        time_remaining = format_time_remaining(main_link["expires_at"])
-        link_display = f"🔗 **Link activo:** `{main_link['url']}`\n⏳ **Tiempo restante:** {time_remaining}"
+    if main_link and main_link.expires_at:
+        time_remaining = format_time_remaining(main_link.expires_at)
+        link_display = f"🔗 **Link activo:** `{main_link.url}`\n⏳ **Tiempo restante:** {time_remaining}"
     else:
         link_display = "🔗 **Link:** No registrado"
 
@@ -157,16 +157,16 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("❌ Usuario no encontrado. Usa /start para comenzar.")
         return
 
-    username = existing_user["username"] or "Usuario"
-    reputation = existing_user["reputation"] or 0
+    username = existing_user.username or "Usuario"
+    reputation = existing_user.reputation or 0
     rank = get_user_rank(user_id) or "?"
     links = get_user_links(user_id)
-    vip_level = existing_user["vip_level"] if existing_user["vip_level"] else 0
+    vip_level = existing_user.vip_level if existing_user.vip_level else 0
 
     main_link = links[0] if links else None
-    if main_link and main_link["expires_at"]:
-        time_remaining = format_time_remaining(main_link["expires_at"])
-        link_display = f"🔗 **Link activo:** `{main_link['url']}`\n⏳ **Tiempo restante:** {time_remaining}"
+    if main_link and main_link.expires_at:
+        time_remaining = format_time_remaining(main_link.expires_at)
+        link_display = f"🔗 **Link activo:** `{main_link.url}`\n⏳ **Tiempo restante:** {time_remaining}"
     else:
         link_display = "🔗 **Link:** No registrado"
 
