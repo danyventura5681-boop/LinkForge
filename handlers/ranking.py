@@ -13,12 +13,23 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
     top_users = get_top_users(limit=10)
 
     if not top_users:
-        await update.message.reply_text(
-            "📊 **Ranking vacío**\n\n"
-            "Sé el primero en registrar un link usando el botón 'Registrar Link'.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]),
-            parse_mode='Markdown'
-        )
+        text = "📊 **Ranking vacío**\n\nSé el primero en registrar un link usando el botón 'Registrar Link'."
+        keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
+
+        # Si viene de un callback (botón), usar query.edit_message_text
+        if update.callback_query:
+            query = update.callback_query
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
         return
 
     text = "🏆 **TOP 10 - Reputación** 🏆\n\n"
@@ -42,11 +53,21 @@ async def ranking(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
     ]
 
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
+    # Si viene de un callback (botón), usar query.edit_message_text
+    if update.callback_query:
+        query = update.callback_query
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        # Si viene de un comando /ranking
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
     logger.info("📊 ranking: Ranking mostrado correctamente")
 
 async def ranking_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
