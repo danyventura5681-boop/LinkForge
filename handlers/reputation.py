@@ -11,10 +11,9 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"🎁 earn_reputation: Usuario {user_id} solicitó ganar reputación")
 
     top_users = get_top_users(limit=10)
-    available_users = [u for u in top_users if u["telegram_id"] != user_id][:5]
+    available_users = [u for u in top_users if u.telegram_id != user_id][:5]
 
     if not available_users:
-        # Mensaje cuando no hay usuarios disponibles
         text = (
             "🎁 **No hay usuarios disponibles**\n\n"
             "Vuelve más tarde cuando haya más usuarios registrados.\n\n"
@@ -22,7 +21,6 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
 
-        # Si viene de un callback (botón), usar query.edit_message_text
         if update.callback_query:
             query = update.callback_query
             await query.edit_message_text(
@@ -38,7 +36,7 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    context.user_data['available_links'] = [(u["telegram_id"], u["username"]) for u in available_users]
+    context.user_data['available_links'] = [(u.telegram_id, u.username) for u in available_users]
 
     text = "🎁 **Gana reputación** 🎁\n\n"
     text += "Haz clic en los links de otros usuarios para ganar **+5 reputación** cada uno.\n\n"
@@ -46,22 +44,21 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = []
     for i, user in enumerate(available_users, 1):
-        username = user["username"] or f"Usuario_{user['telegram_id']}"
-        text += f"{i}. @{username} - {user['reputation']} pts\n"
+        username = user.username or f"Usuario_{user.telegram_id}"
+        text += f"{i}. @{username} - {user.reputation} pts\n"
 
         # Buscar link del usuario
-        user_links = get_user_links(user["telegram_id"])
+        user_links = get_user_links(user.telegram_id)
         if user_links:
-            link_url = user_links[0]["url"]
+            link_url = user_links[0].url
             keyboard.append([InlineKeyboardButton(
                 f"🔗 Visitar link de @{username} (+5)",
-                callback_data=f"visit_link_{user['telegram_id']}_{link_url}"
+                callback_data=f"visit_link_{user.telegram_id}_{link_url}"
             )])
 
     keyboard.append([InlineKeyboardButton("🔄 Más links", callback_data="more_links")])
     keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")])
 
-    # Si viene de un callback (botón), usar query.edit_message_text
     if update.callback_query:
         query = update.callback_query
         await query.edit_message_text(
@@ -70,7 +67,6 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
     else:
-        # Si viene de un comando /reputation
         await update.message.reply_text(
             text,
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -108,7 +104,7 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     add_reputation(user_id, 5)
     logger.info(f"✅ +5 reputación para usuario {user_id}")
 
-    username = target_user["username"] or f"Usuario_{target_user_id}"
+    username = target_user.username or f"Usuario_{target_user_id}"
 
     await query.edit_message_text(
         f"✅ **+5 reputación!**\n\n"
