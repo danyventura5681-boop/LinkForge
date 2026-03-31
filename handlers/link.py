@@ -21,7 +21,7 @@ def is_valid_url(url: str) -> bool:
 
 def get_promotion_days(user):
     """Determina los días de promoción según el nivel VIP del usuario"""
-    if user and user["vip_level"] > 0:
+    if user and user.vip_level > 0:
         return 30
     return 10
 
@@ -49,7 +49,7 @@ def format_expiration_date(expires_at):
 async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de registro de link (modo conversación)."""
     logger.info("🔵🔵🔵 register_start EJECUTADO 🔵🔵🔵")
-    
+
     text = (
         "📝 **Envíame el link que quieres promocionar**\n\n"
         "Ejemplo: `https://tusitio.com`\n\n"
@@ -81,7 +81,7 @@ async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYP
     logger.info("🔵🔵🔵🔵 process_link_message EJECUTADO 🔵🔵🔵🔵")
     logger.info(f"📨 Mensaje recibido: {update.message.text}")
     logger.info(f"📨 waiting_for_link = {context.user_data.get('waiting_for_link')}")
-    
+
     if not context.user_data.get('waiting_for_link'):
         logger.info("⚠️ waiting_for_link = False, ignorando mensaje")
         return
@@ -107,15 +107,15 @@ async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Obtener usuario para verificar nivel VIP
     db_user = get_user(telegram_id)
-    
-    # Manejo seguro de datos
+
+    # Manejo seguro de datos con SQLAlchemy
     if db_user:
-        vip_level = db_user["vip_level"] if "vip_level" in db_user.keys() else 0
+        vip_level = db_user.vip_level if db_user.vip_level else 0
         days = 30 if vip_level > 0 else 10
     else:
         vip_level = 0
         days = 10
-    
+
     logger.info(f"🔵 Usuario VIP nivel: {vip_level}, días de promoción: {days}")
 
     # Verificar si el usuario ya tiene links activos
