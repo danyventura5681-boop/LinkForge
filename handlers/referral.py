@@ -47,23 +47,19 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         logger.info(f"🔗 Referido: user {user_id} vino por enlace de {referrer_id}")
 
-        # Verificar que no es el mismo usuario
         if user_id == referrer_id:
             logger.info("⚠️ Usuario intentó referirse a sí mismo")
             return
 
-        # Verificar que el usuario no existe ya (para evitar dar reputación múltiple)
         from database.database import get_user
         existing_user = get_user(user_id)
         if existing_user:
             logger.info(f"⚠️ Usuario {user_id} ya existe, no se da recompensa")
             return
 
-        # Dar reputación al referente
         add_reputation(referrer_id, 50)
         logger.info(f"✅ Referido exitoso: {user_id} -> {referrer_id}, +50 reputación")
 
-        # Notificar al referente
         try:
             await context.bot.send_message(
                 chat_id=referrer_id,
