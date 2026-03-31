@@ -6,7 +6,3 @@ cmds = ["pip install -r requirements.txt"]
 
 [phases.start]
 cmd = "python main.py"
-
-[build]
-# No usar variables de entorno en build
-ignoreVariables = true
