@@ -52,7 +52,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         vip_level = existing_user["vip_level"] if existing_user["vip_level"] else 0
 
     main_link = links[0] if links else None
-    if main_link and main_link.get("expires_at"):
+    if main_link and main_link["expires_at"]:
         time_remaining = format_time_remaining(main_link["expires_at"])
         link_display = f"🔗 **Link activo:** `{main_link['url']}`\n⏳ **Tiempo restante:** {time_remaining}"
     else:
@@ -164,7 +164,7 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     vip_level = existing_user["vip_level"] if existing_user["vip_level"] else 0
 
     main_link = links[0] if links else None
-    if main_link and main_link.get("expires_at"):
+    if main_link and main_link["expires_at"]:
         time_remaining = format_time_remaining(main_link["expires_at"])
         link_display = f"🔗 **Link activo:** `{main_link['url']}`\n⏳ **Tiempo restante:** {time_remaining}"
     else:
