@@ -14,7 +14,7 @@ if not TOKEN:
 logger.info(f"✅ Token cargado correctamente")
 
 # ===========================================
-# IMPORTAR HANDLERS
+# IMPORTAR HANDLERS (TODOS)
 # ===========================================
 from handlers.start import start, button_handler, back_to_start
 from handlers.link import (
@@ -30,7 +30,9 @@ from handlers.admin import (
     ban_user_action, ban_user_process, unban_user_action, unban_user_process, list_users
 )
 from handlers.vip import (
-    vip_menu, buy_vip, check_payment, check_payment_retry, confirm_payment_command
+    vip_menu, buy_vip, check_payment, check_payment_retry, confirm_payment_command,
+    manual_payment_start, manual_payment_get_amount, manual_payment_get_address, manual_payment_get_tx,
+    WAITING_PAYMENT_AMOUNT, WAITING_PAYMENT_ADDRESS, WAITING_PAYMENT_TX
 )
 
 # Estados para conversación (admin)
@@ -56,7 +58,7 @@ telegram_app.add_handler(CommandHandler("start", process_referral))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
 
 # ===========================================
-# HANDLERS DE CALLBACKS
+# HANDLERS DE CALLBACKS (ORDEN CORRECTO)
 # ===========================================
 
 # 1. Handler para volver al menú (prioridad alta)
@@ -79,6 +81,7 @@ telegram_app.add_handler(CallbackQueryHandler(vip_menu, pattern="^vip_menu$"))
 telegram_app.add_handler(CallbackQueryHandler(buy_vip, pattern="^buy_vip_"))
 telegram_app.add_handler(CallbackQueryHandler(check_payment, pattern="^check_payment$"))
 telegram_app.add_handler(CallbackQueryHandler(check_payment_retry, pattern="^check_payment_retry$"))
+telegram_app.add_handler(CallbackQueryHandler(manual_payment_start, pattern="^manual_payment$"))
 
 # 6. Handler para admin - acciones directas
 telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
@@ -126,6 +129,20 @@ admin_unban_user_conv = ConversationHandler(
     fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
 )
 telegram_app.add_handler(admin_unban_user_conv)
+
+# ===========================================
+# CONVERSATION HANDLER PARA PAGO MANUAL VIP
+# ===========================================
+manual_payment_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(manual_payment_start, pattern="^manual_payment$")],
+    states={
+        WAITING_PAYMENT_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_payment_get_amount)],
+        WAITING_PAYMENT_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_payment_get_address)],
+        WAITING_PAYMENT_TX: [MessageHandler(filters.TEXT & ~filters.COMMAND, manual_payment_get_tx)],
+    },
+    fallbacks=[CommandHandler("cancel", cancel_admin)],
+)
+telegram_app.add_handler(manual_payment_conv)
 
 # ===========================================
 # INICIAR BOT CON POLLING
