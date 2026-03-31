@@ -121,14 +121,14 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
         return WAITING_REPUTATION
 
     target_user = context.user_data['target_user']
-    add_reputation(target_user["telegram_id"], amount)
+    add_reputation(target_user.telegram_id, amount)
 
     await update.message.reply_text(
-        f"✅ Se añadieron **{amount} puntos** a @{target_user['username'] or target_user['telegram_id']}\n"
-        f"Nueva reputación: {target_user['reputation'] + amount}",
+        f"✅ Se añadieron **{amount} puntos** a @{target_user.username or target_user.telegram_id}\n"
+        f"Nueva reputación: {target_user.reputation + amount}",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
     )
-    logger.info(f"✅ Reputación añadida a usuario {target_user['telegram_id']}")
+    logger.info(f"✅ Reputación añadida a usuario {target_user.telegram_id}")
 
     return ConversationHandler.END
 
@@ -160,25 +160,25 @@ async def make_admin_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
 
-    if user["is_admin"]:
+    if user.is_admin:
         await update.message.reply_text(
-            f"👑 El usuario @{user['username'] or user['telegram_id']} ya es administrador.",
+            f"👑 El usuario @{user.username or user.telegram_id} ya es administrador.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
         )
         return ConversationHandler.END
 
-    make_admin(user["telegram_id"])
+    make_admin(user.telegram_id)
 
     await update.message.reply_text(
-        f"✅ **@{user['username'] or user['telegram_id']} ahora es administrador.**",
+        f"✅ **@{user.username or user.telegram_id} ahora es administrador.**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
     )
-    logger.info(f"👑 Usuario {user['telegram_id']} ahora es admin")
+    logger.info(f"👑 Usuario {user.telegram_id} ahora es admin")
 
     # Notificar al nuevo admin
     try:
         await context.bot.send_message(
-            chat_id=user["telegram_id"],
+            chat_id=user.telegram_id,
             text="👑 **¡Felicidades! Has sido nombrado administrador de LinkForge.**\n\n"
                  "Ahora tienes acceso al panel de administración.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡️ Ver Admin Panel", callback_data="admin_panel")]]),
@@ -217,25 +217,25 @@ async def ban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ConversationHandler.END
 
-    if user["is_banned"]:
+    if user.is_banned:
         await update.message.reply_text(
-            f"🚫 El usuario @{user['username'] or user['telegram_id']} ya está baneado.",
+            f"🚫 El usuario @{user.username or user.telegram_id} ya está baneado.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
         )
         return ConversationHandler.END
 
-    ban_user(user["telegram_id"])
+    ban_user(user.telegram_id)
 
     await update.message.reply_text(
-        f"✅ **@{user['username'] or user['telegram_id']} ha sido baneado.**",
+        f"✅ **@{user.username or user.telegram_id} ha sido baneado.**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
     )
-    logger.info(f"🚫 Usuario {user['telegram_id']} baneado")
+    logger.info(f"🚫 Usuario {user.telegram_id} baneado")
 
     # Notificar al usuario baneado
     try:
         await context.bot.send_message(
-            chat_id=user["telegram_id"],
+            chat_id=user.telegram_id,
             text="🚫 **Has sido baneado de LinkForge.**\n\n"
                  "Si crees que es un error, contacta al administrador.",
             parse_mode='Markdown'
@@ -273,25 +273,25 @@ async def unban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
         return ConversationHandler.END
 
-    if not user["is_banned"]:
+    if not user.is_banned:
         await update.message.reply_text(
-            f"✅ El usuario @{user['username'] or user['telegram_id']} no está baneado.",
+            f"✅ El usuario @{user.username or user.telegram_id} no está baneado.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
         )
         return ConversationHandler.END
 
-    unban_user(user["telegram_id"])
+    unban_user(user.telegram_id)
 
     await update.message.reply_text(
-        f"✅ **@{user['username'] or user['telegram_id']} ha sido desbaneado.**",
+        f"✅ **@{user.username or user.telegram_id} ha sido desbaneado.**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
     )
-    logger.info(f"✅ Usuario {user['telegram_id']} desbaneado")
+    logger.info(f"✅ Usuario {user.telegram_id} desbaneado")
 
     # Notificar al usuario desbaneado
     try:
         await context.bot.send_message(
-            chat_id=user["telegram_id"],
+            chat_id=user.telegram_id,
             text="✅ **Has sido desbaneado de LinkForge.**\n\n"
                  "Ya puedes usar el bot nuevamente.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 Ir al Panel Principal", callback_data="volver_menu")]]),
@@ -319,9 +319,9 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = "📋 **Lista de usuarios**\n\n"
     for u in users[:20]:
-        admin_flag = "👑 " if u["is_admin"] else ""
-        banned_flag = "🚫 " if u["is_banned"] else ""
-        text += f"{admin_flag}{banned_flag}`{u['telegram_id']}` - {u['username'] or 'Sin nombre'} - {u['reputation']} pts\n"
+        admin_flag = "👑 " if u.is_admin else ""
+        banned_flag = "🚫 " if u.is_banned else ""
+        text += f"{admin_flag}{banned_flag}`{u.telegram_id}` - {u.username or 'Sin nombre'} - {u.reputation} pts\n"
 
     if len(users) > 20:
         text += f"\n... y {len(users) - 20} más."
