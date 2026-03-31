@@ -62,9 +62,9 @@ async def vip_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"⭐ vip_menu: Usuario {user_id} solicitó planes VIP")
 
     if user:
-        current_vip = user["vip_level"] if user["vip_level"] else 0
-        vip_expires = user["vip_expires_at"] if user["vip_expires_at"] else None
-        reputation = user["reputation"] if user["reputation"] else 0
+        current_vip = user.vip_level if user.vip_level else 0
+        vip_expires = user.vip_expires_at if user.vip_expires_at else None
+        reputation = user.reputation if user.reputation else 0
     else:
         current_vip = 0
         vip_expires = None
@@ -194,20 +194,20 @@ async def manual_payment_start(update: Update, context: ContextTypes.DEFAULT_TYP
     """Inicia el proceso de verificación manual de pago."""
     query = update.callback_query
     await query.answer()
-    
+
     pending_vip = context.user_data.get('pending_vip')
     payment_hash = context.user_data.get('payment_hash')
-    
+
     if not pending_vip or not payment_hash:
         await query.edit_message_text(
             "❌ No hay ninguna compra pendiente.\n\nUsa el botón 'VIP' para seleccionar un plan.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver a VIP", callback_data="vip_menu")]])
         )
         return
-    
+
     plan = VIP_PLANS.get(pending_vip)
     expected_trx = get_trx_amount(plan['price_usd'])
-    
+
     text = (
         f"✅ **Verificación manual de pago**\n\n"
         f"Para verificar tu pago, responde las siguientes preguntas:\n\n"
@@ -216,7 +216,7 @@ async def manual_payment_start(update: Update, context: ContextTypes.DEFAULT_TYP
         f"3️⃣ **Hash de la transacción** (opcional, pero ayuda)\n\n"
         f"Por favor, **envía el monto enviado** (ejemplo: 10):"
     )
-    
+
     await query.edit_message_text(text, parse_mode='Markdown')
     return WAITING_PAYMENT_AMOUNT
 
@@ -249,15 +249,15 @@ async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TY
     tx_hash = update.message.text.strip()
     if tx_hash.lower() == 'ninguno':
         tx_hash = "No proporcionado"
-    
+
     pending_vip = context.user_data.get('pending_vip')
     payment_hash = context.user_data.get('payment_hash')
     amount = context.user_data.get('manual_amount')
     address = context.user_data.get('manual_address')
-    
+
     plan = VIP_PLANS.get(pending_vip)
     expected_trx = get_trx_amount(plan['price_usd'])
-    
+
     # Enviar notificación al admin
     admin_id = 5057900537  # Tu ID
     admin_text = (
@@ -271,7 +271,7 @@ async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TY
         f"📝 Código pago: `{payment_hash}`\n\n"
         f"Para activar VIP, usa: `/confirmar {payment_hash}`"
     )
-    
+
     try:
         await context.bot.send_message(
             chat_id=admin_id,
@@ -292,13 +292,13 @@ async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TY
             "❌ Error al enviar la información. Contacta a @danyvg56 directamente.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
-    
+
     # Limpiar contexto
     context.user_data.pop('pending_vip', None)
     context.user_data.pop('payment_hash', None)
     context.user_data.pop('manual_amount', None)
     context.user_data.pop('manual_address', None)
-    
+
     return ConversationHandler.END
 
 async def check_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -369,7 +369,7 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
     from database.database import get_payment_by_hash
     payment = get_payment_by_hash(payment_hash)
 
-    if payment and payment["status"] == "confirmed":
+    if payment and payment.status == "confirmed":
         plan = VIP_PLANS.get(pending_vip)
         await query.edit_message_text(
             f"🎉 **¡Pago confirmado!**\n\n"
@@ -463,16 +463,16 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
             logger.error(f"Error procesando formato antiguo: {e}")
 
     # Si encontramos el pago en la base de datos
-    if payment and payment["status"] == "pending":
-        plan = VIP_PLANS.get(payment["vip_level"])
+    if payment and payment.status == "pending":
+        plan = VIP_PLANS.get(payment.vip_level)
         if plan:
             from database.database import confirm_payment
             confirm_payment(payment_ref)
-            activate_vip(payment["user_id"], payment["vip_level"], plan['days'], plan['reputation'])
+            activate_vip(payment.user_id, payment.vip_level, plan['days'], plan['reputation'])
 
             await update.message.reply_text(
                 f"✅ **Pago confirmado y VIP activado!**\n\n"
-                f"👤 Usuario ID: `{payment['user_id']}`\n"
+                f"👤 Usuario ID: `{payment.user_id}`\n"
                 f"⭐ Plan: {plan['name']}\n"
                 f"🎁 +{plan['reputation']} reputación\n"
                 f"💰 Monto: ${plan['price_usd']} USD",
@@ -481,7 +481,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
 
             try:
                 await context.bot.send_message(
-                    chat_id=payment["user_id"],
+                    chat_id=payment.user_id,
                     text=f"🎉 **¡Pago confirmado!**\n\n"
                          f"⭐ Tu {plan['name']} ha sido activado.\n"
                          f"🎁 +{plan['reputation']} reputación\n"
@@ -494,7 +494,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
                 logger.error(f"Error notificando al usuario: {e}")
         else:
             await update.message.reply_text("❌ Plan no válido en el pago.")
-    elif payment and payment["status"] == "confirmed":
+    elif payment and payment.status == "confirmed":
         await update.message.reply_text("ℹ️ Este pago ya fue confirmado anteriormente.")
     else:
         await update.message.reply_text(f"❌ No se encontró ningún pago pendiente con el código: `{payment_ref}`", parse_mode='Markdown')
