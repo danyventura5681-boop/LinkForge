@@ -109,40 +109,47 @@ logger.info("✅ Tablas creadas/verificadas")
 # FUNCIONES DE USUARIO
 # ===========================================
 
-def get_user(telegram_id):
+def create_user(telegram_id: int, username: str = None, referred_by: int = None):
+    """Crea un usuario nuevo."""
+    session = SessionLocal()
+    
+    user = User(telegram_id=telegram_id, username=username, referred_by=referred_by)
+    session.add(user)
+    
+    # Si fue referido, dar reputación al referente
+    if referred_by:
+        referrer = session.query(User).filter_by(telegram_id=referred_by).first()
+        if referrer:
+            referrer.reputation += 50
+            referral = Referral(referrer_id=referred_by, referred_id=telegram_id, reputation_earned=50)
+            session.add(referral)
+    
+    session.commit()
+    session.close()
+
+def get_user(telegram_id: int):
+    """Obtiene un usuario por telegram_id."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     session.close()
     return user
 
-def get_user_by_username(username):
+def get_user_by_username(username: str):
+    """Obtiene un usuario por username."""
     session = SessionLocal()
     user = session.query(User).filter_by(username=username).first()
     session.close()
     return user
 
 def get_all_users():
+    """Obtiene todos los usuarios."""
     session = SessionLocal()
     users = session.query(User).all()
     session.close()
     return users
 
-def create_user(telegram_id, username, referred_by=None):
-    session = SessionLocal()
-    user = User(telegram_id=telegram_id, username=username, referred_by=referred_by)
-    session.add(user)
-    
-    if referred_by:
-        referrer = session.query(User).filter_by(telegram_id=referred_by).first()
-        if referrer:
-            referrer.reputation += 50
-            referral = Referral(referrer_id=referred_by, referred_id=telegram_id)
-            session.add(referral)
-    
-    session.commit()
-    session.close()
-
-def add_reputation(telegram_id, amount):
+def add_reputation(telegram_id: int, amount: int):
+    """Añade reputación a un usuario."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     if user:
@@ -150,7 +157,8 @@ def add_reputation(telegram_id, amount):
         session.commit()
     session.close()
 
-def set_reputation(telegram_id, amount):
+def set_reputation(telegram_id: int, amount: int):
+    """Establece la reputación de un usuario (para admin)."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     if user:
@@ -158,7 +166,8 @@ def set_reputation(telegram_id, amount):
         session.commit()
     session.close()
 
-def ban_user(telegram_id):
+def ban_user(telegram_id: int):
+    """Banea a un usuario."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     if user:
@@ -166,7 +175,8 @@ def ban_user(telegram_id):
         session.commit()
     session.close()
 
-def unban_user(telegram_id):
+def unban_user(telegram_id: int):
+    """Desbanea a un usuario."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     if user:
@@ -174,7 +184,8 @@ def unban_user(telegram_id):
         session.commit()
     session.close()
 
-def make_admin(telegram_id):
+def make_admin(telegram_id: int):
+    """Convierte a un usuario en administrador."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     if user:
@@ -182,20 +193,23 @@ def make_admin(telegram_id):
         session.commit()
     session.close()
 
-def is_admin(telegram_id):
+def is_admin(telegram_id: int) -> bool:
+    """Verifica si un usuario es administrador."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     result = user.is_admin == 1 if user else False
     session.close()
     return result
 
-def get_total_users():
+def get_total_users() -> int:
+    """Obtiene el total de usuarios registrados."""
     session = SessionLocal()
     count = session.query(User).count()
     session.close()
     return count
 
 def get_all_links():
+    """Obtiene todos los links en promoción."""
     session = SessionLocal()
     links = session.query(Link).all()
     session.close()
@@ -205,7 +219,8 @@ def get_all_links():
 # FUNCIONES DE LINKS
 # ===========================================
 
-def register_link(telegram_id, url, link_number=1, days=10):
+def register_link(telegram_id: int, url: str, link_number: int = 1, days: int = 10):
+    """Registra un nuevo link en promoción."""
     session = SessionLocal()
     expires_at = datetime.utcnow() + timedelta(days=days)
     link = Link(user_id=telegram_id, url=url, link_number=link_number, expires_at=expires_at)
@@ -213,7 +228,8 @@ def register_link(telegram_id, url, link_number=1, days=10):
     session.commit()
     session.close()
 
-def get_user_links(telegram_id):
+def get_user_links(telegram_id: int):
+    """Obtiene todos los links activos de un usuario."""
     session = SessionLocal()
     links = session.query(Link).filter(
         Link.user_id == telegram_id,
@@ -222,7 +238,8 @@ def get_user_links(telegram_id):
     session.close()
     return links
 
-def get_active_link(telegram_id, link_number=1):
+def get_active_link(telegram_id: int, link_number: int = 1):
+    """Obtiene un link activo específico."""
     session = SessionLocal()
     link = session.query(Link).filter(
         Link.user_id == telegram_id,
@@ -232,13 +249,15 @@ def get_active_link(telegram_id, link_number=1):
     session.close()
     return link
 
-def delete_links(telegram_id):
+def delete_links(telegram_id: int):
+    """Elimina todos los links expirados de un usuario."""
     session = SessionLocal()
     session.query(Link).filter(Link.user_id == telegram_id).delete()
     session.commit()
     session.close()
 
-def extend_link_expiration(telegram_id, days):
+def extend_link_expiration(telegram_id: int, days: int):
+    """Extiende la expiración de los links activos."""
     session = SessionLocal()
     session.query(Link).filter(
         Link.user_id == telegram_id,
@@ -247,7 +266,8 @@ def extend_link_expiration(telegram_id, days):
     session.commit()
     session.close()
 
-def get_expiring_links(hours):
+def get_expiring_links(hours: int):
+    """Obtiene links que expiran en X horas."""
     session = SessionLocal()
     now = datetime.utcnow()
     expire_time = now + timedelta(hours=hours)
@@ -262,27 +282,32 @@ def get_expiring_links(hours):
 # FUNCIONES DE REPUTACIÓN Y RANKING
 # ===========================================
 
-def get_top_users(limit=5):
+def get_top_users(limit: int = 5):
+    """Obtiene los usuarios con mayor reputación."""
     session = SessionLocal()
     users = session.query(User).filter(User.is_banned == 0).order_by(User.reputation.desc()).limit(limit).all()
     session.close()
     return users
 
-def get_user_rank(telegram_id):
+def get_user_rank(telegram_id: int) -> int:
+    """Obtiene la posición de un usuario en el ranking."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     if not user:
-        return None
+        return 0
     rank = session.query(User).filter(User.reputation > user.reputation).count() + 1
     session.close()
     return rank
 
-def record_click(user_id, link_id, reputation_earned=5):
+def record_click(user_id: int, link_id: int, reputation_earned: int = 5):
+    """Registra un clic a un link y da reputación al que clicó."""
     session = SessionLocal()
+    
+    # Registrar clic
     click = Click(user_id=user_id, link_id=link_id, reputation_earned=reputation_earned)
     session.add(click)
     
-    # Dar reputación al que hizo clic
+    # Dar reputación al que clicó
     user = session.query(User).filter_by(telegram_id=user_id).first()
     if user:
         user.reputation += reputation_earned
@@ -299,7 +324,8 @@ def record_click(user_id, link_id, reputation_earned=5):
 # FUNCIONES VIP
 # ===========================================
 
-def activate_vip(telegram_id, vip_level, days=30, reputation_bonus=0):
+def activate_vip(telegram_id: int, vip_level: int, days: int = 30, reputation_bonus: int = 0):
+    """Activa un plan VIP para un usuario."""
     session = SessionLocal()
     user = session.query(User).filter_by(telegram_id=telegram_id).first()
     if user:
@@ -321,7 +347,8 @@ def activate_vip(telegram_id, vip_level, days=30, reputation_bonus=0):
 # FUNCIONES DE PAGOS
 # ===========================================
 
-def register_payment(user_id, tx_hash, amount_usd, crypto_amount, crypto_currency, vip_level):
+def register_payment(user_id: int, tx_hash: str, amount_usd: int, crypto_amount: float, crypto_currency: str, vip_level: int):
+    """Registra un pago pendiente."""
     session = SessionLocal()
     payment = Payment(
         user_id=user_id,
@@ -335,28 +362,39 @@ def register_payment(user_id, tx_hash, amount_usd, crypto_amount, crypto_currenc
     session.commit()
     session.close()
 
-def confirm_payment(tx_hash):
+def confirm_payment(tx_hash: str):
+    """Confirma un pago y activa VIP."""
     session = SessionLocal()
     payment = session.query(Payment).filter_by(tx_hash=tx_hash, status='pending').first()
     if payment:
+        # Mapeo de reputación por plan
+        bonus_map = {1: 500, 2: 2800, 3: 6000}
+        reputation_bonus = bonus_map.get(payment.vip_level, 0)
+        
+        activate_vip(payment.user_id, payment.vip_level, 30, reputation_bonus)
+        
         payment.status = 'confirmed'
         payment.confirmed_at = datetime.utcnow()
         session.commit()
     session.close()
+    return payment
 
-def get_payment_by_hash(tx_hash):
+def get_payment_by_hash(tx_hash: str):
+    """Obtiene un pago por su hash/código."""
     session = SessionLocal()
     payment = session.query(Payment).filter_by(tx_hash=tx_hash).first()
     session.close()
     return payment
 
 def get_pending_payments():
+    """Obtiene todos los pagos pendientes de verificación."""
     session = SessionLocal()
     payments = session.query(Payment).filter_by(status='pending').order_by(Payment.created_at).all()
     session.close()
     return payments
 
-def get_payment_by_user(user_id, status=None):
+def get_payment_by_user(user_id: int, status: str = None):
+    """Obtiene los pagos de un usuario específico."""
     session = SessionLocal()
     query = session.query(Payment).filter_by(user_id=user_id)
     if status:
@@ -365,7 +403,8 @@ def get_payment_by_user(user_id, status=None):
     session.close()
     return payments
 
-def update_payment_status(tx_hash, status):
+def update_payment_status(tx_hash: str, status: str):
+    """Actualiza el estado de un pago."""
     session = SessionLocal()
     session.query(Payment).filter_by(tx_hash=tx_hash).update({"status": status, "confirmed_at": datetime.utcnow()})
     session.commit()
@@ -375,14 +414,16 @@ def update_payment_status(tx_hash, status):
 # FUNCIONES DE NOTIFICACIONES
 # ===========================================
 
-def register_notification(user_id, link_id, hours_before):
+def register_notification(user_id: int, link_id: int, hours_before: int):
+    """Registra que se enviará una notificación."""
     session = SessionLocal()
     notification = Notification(user_id=user_id, link_id=link_id, hours_before=hours_before)
     session.add(notification)
     session.commit()
     session.close()
 
-def mark_notification_sent(notification_id):
+def mark_notification_sent(notification_id: int):
+    """Marca una notificación como enviada."""
     session = SessionLocal()
     session.query(Notification).filter_by(id=notification_id).update({"sent": 1})
     session.commit()
