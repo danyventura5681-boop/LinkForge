@@ -2,3 +2,5 @@ python-telegram-bot>=20.0
 sqlalchemy
 psycopg2-binary
 python-dotenv
+pillow
+requests
