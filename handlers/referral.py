@@ -30,18 +30,28 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
     ]
 
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
+    # Si viene de un callback (botón), usar query.edit_message_text
+    if update.callback_query:
+        query = update.callback_query
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        # Si viene de un comando /referral
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
     logger.info(f"👥 Enlace de referido mostrado para {username}")
 
 async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Procesa cuando un usuario llega por enlace de referido."""
     args = context.args
     logger.info(f"🔗 process_referral: Args recibidos: {args}")
-    
+
     if args and args[0].startswith('ref_'):
         referrer_id = int(args[0][4:])
         user_id = update.effective_user.id
