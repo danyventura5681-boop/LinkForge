@@ -19,11 +19,20 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"🛡️ admin_panel: Usuario {user_id} accedió al panel admin")
 
+    # Verificar permisos
     if user_id != ADMIN_ID and not is_admin(user_id):
-        await update.message.reply_text(
-            "⛔ No tienes permisos de administrador.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
-        )
+        # Si viene de un callback, usar query.edit_message_text
+        if update.callback_query:
+            query = update.callback_query
+            await query.edit_message_text(
+                "⛔ No tienes permisos de administrador.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
+            )
+        else:
+            await update.message.reply_text(
+                "⛔ No tienes permisos de administrador.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
+            )
         return
 
     total_users = get_total_users()
@@ -46,11 +55,21 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
     ]
 
-    await update.message.reply_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
+    # Si viene de un callback (botón), usar query.edit_message_text
+    if update.callback_query:
+        query = update.callback_query
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        # Si viene de un comando /admin
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
     logger.info("🛡️ Panel admin mostrado")
 
 async def add_reputation_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
