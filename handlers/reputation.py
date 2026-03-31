@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_top_users, get_user, add_reputation
+from database.database import get_top_users, get_user, add_reputation, get_user_links
 
 logger = logging.getLogger(__name__)
 
@@ -10,12 +10,10 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"🎁 earn_reputation: Usuario {user_id} solicitó ganar reputación")
 
-    # Obtener top 10 usuarios (excluyendo al propio usuario)
     top_users = get_top_users(limit=10)
     available_users = [u for u in top_users if u["telegram_id"] != user_id][:5]
 
     if not available_users:
-        logger.info("🎁 No hay usuarios disponibles")
         await update.message.reply_text(
             "🎁 **No hay usuarios disponibles**\n\n"
             "Vuelve más tarde cuando haya más usuarios registrados.\n\n"
@@ -25,7 +23,6 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Guardar en contexto los links disponibles para esta sesión
     context.user_data['available_links'] = [(u["telegram_id"], u["username"]) for u in available_users]
 
     text = "🎁 **Gana reputación** 🎁\n\n"
@@ -36,10 +33,15 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, user in enumerate(available_users, 1):
         username = user["username"] or f"Usuario_{user['telegram_id']}"
         text += f"{i}. @{username} - {user['reputation']} pts\n"
-        keyboard.append([InlineKeyboardButton(
-            f"🔗 Visitar link de @{username} (+5)",
-            callback_data=f"visit_link_{user['telegram_id']}"
-        )])
+        
+        # Buscar link del usuario
+        user_links = get_user_links(user["telegram_id"])
+        if user_links:
+            link_url = user_links[0]["url"]
+            keyboard.append([InlineKeyboardButton(
+                f"🔗 Visitar link de @{username} (+5)",
+                callback_data=f"visit_link_{user['telegram_id']}_{link_url}"
+            )])
 
     keyboard.append([InlineKeyboardButton("🔄 Más links", callback_data="more_links")])
     keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")])
@@ -57,44 +59,36 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = query.from_user.id
-    target_user_id = int(query.data.split("_")[2])
+    parts = query.data.split("_")
+    target_user_id = int(parts[2])
+    link_url = "_".join(parts[3:]) if len(parts) > 3 else ""
+
     logger.info(f"🔗 visit_link: Usuario {user_id} visitó link de {target_user_id}")
 
-    # Verificar que no se visite a sí mismo
     if user_id == target_user_id:
-        logger.info("⚠️ Usuario intentó visitar su propio link")
         await query.edit_message_text(
             "❌ No puedes visitar tu propio link.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
         return
 
-    # Obtener información del usuario objetivo
     target_user = get_user(target_user_id)
     if not target_user:
-        logger.info(f"❌ Usuario objetivo {target_user_id} no encontrado")
         await query.edit_message_text(
             "❌ Usuario no encontrado.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
         return
 
-    # Dar reputación al usuario que hizo clic
     add_reputation(user_id, 5)
     logger.info(f"✅ +5 reputación para usuario {user_id}")
 
     username = target_user["username"] or f"Usuario_{target_user_id}"
 
-    # Eliminar este link de los disponibles
-    if 'available_links' in context.user_data:
-        context.user_data['available_links'] = [
-            (uid, uname) for uid, uname in context.user_data['available_links']
-            if uid != target_user_id
-        ]
-
     await query.edit_message_text(
         f"✅ **+5 reputación!**\n\n"
         f"Has visitado el link de **@{username}**\n\n"
+        f"🔗 Link visitado: {link_url}\n\n"
         f"🎁 Sigue visitando links para ganar más puntos.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🎁 Ver más links", callback_data="more_links")],
