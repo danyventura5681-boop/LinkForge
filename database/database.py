@@ -16,12 +16,6 @@ logger = logging.getLogger(__name__)
 # Leer URL de base de datos desde variable de entorno
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# LOG DE DIAGNÓSTICO
-logger.info(f"🔍 DATABASE_URL encontrada: {'SI' if DATABASE_URL else 'NO'}")
-if DATABASE_URL:
-    # Mostrar solo los primeros 30 caracteres por seguridad
-    logger.info(f"🔍 DATABASE_URL (primeros 30 chars): {DATABASE_URL[:30]}...")
-
 # Si no hay DATABASE_URL, usar SQLite local (fallback)
 if not DATABASE_URL:
     from pathlib import Path
@@ -33,16 +27,12 @@ else:
     logger.info(f"✅ Usando PostgreSQL desde DATABASE_URL")
 
 # Configurar engine
-try:
-    if DATABASE_URL.startswith("postgresql"):
-        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-        logger.info("✅ Conectado a PostgreSQL (Supabase)")
-    else:
-        engine = create_engine(DATABASE_URL)
-        logger.info("✅ Conectado a SQLite")
-except Exception as e:
-    logger.error(f"❌ Error de conexión a la base de datos: {e}")
-    raise
+if DATABASE_URL.startswith("postgresql"):
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    logger.info("✅ Conectado a PostgreSQL (Supabase)")
+else:
+    engine = create_engine(DATABASE_URL)
+    logger.info("✅ Conectado a SQLite")
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -112,14 +102,8 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # Crear tablas si no existen
-try:
-    Base.metadata.create_all(engine)
-    logger.info("✅ Tablas creadas/verificadas correctamente")
-except Exception as e:
-    logger.error(f"❌ Error al crear tablas: {e}")
-    raise
-
-logger.info("📊 Base de datos inicializada correctamente")
+Base.metadata.create_all(engine)
+logger.info("✅ Tablas creadas/verificadas")
 
 # ===========================================
 # FUNCIONES DE USUARIO
