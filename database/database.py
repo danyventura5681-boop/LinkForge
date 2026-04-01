@@ -1,9 +1,11 @@
 import os
 import logging
+import time
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Boolean, BigInteger, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 import random
 import string
 
@@ -26,13 +28,28 @@ if not DATABASE_URL:
 else:
     logger.info(f"✅ Usando PostgreSQL desde DATABASE_URL")
 
-# Configurar engine
-if DATABASE_URL.startswith("postgresql"):
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    logger.info("✅ Conectado a PostgreSQL (Supabase)")
-else:
-    engine = create_engine(DATABASE_URL)
-    logger.info("✅ Conectado a SQLite")
+# Configurar engine con timeout y NullPool para evitar conexiones persistentes
+try:
+    if DATABASE_URL.startswith("postgresql"):
+        engine = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            poolclass=NullPool,  # No mantener conexiones persistentes
+            connect_args={
+                "connect_timeout": 30,  # Timeout de conexión
+                "keepalives": 1,
+                "keepalives_idle": 30,
+                "keepalives_interval": 10,
+                "keepalives_count": 5
+            }
+        )
+        logger.info("✅ Conectado a PostgreSQL (Supabase)")
+    else:
+        engine = create_engine(DATABASE_URL)
+        logger.info("✅ Conectado a SQLite")
+except Exception as e:
+    logger.error(f"❌ Error de conexión a la base de datos: {e}")
+    raise
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -101,9 +118,29 @@ class Notification(Base):
     sent = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-# Crear tablas si no existen
-Base.metadata.create_all(engine)
-logger.info("✅ Tablas creadas/verificadas")
+# ===========================================
+# CREAR TABLAS CON REINTENTOS
+# ===========================================
+
+def create_tables_with_retry(max_retries=3, delay=5):
+    """Intenta crear las tablas con reintentos"""
+    for attempt in range(max_retries):
+        try:
+            Base.metadata.create_all(engine)
+            logger.info("✅ Tablas creadas/verificadas correctamente")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Intento {attempt + 1} falló al crear tablas: {e}")
+            if attempt < max_retries - 1:
+                logger.info(f"🔄 Reintentando en {delay} segundos...")
+                time.sleep(delay)
+            else:
+                logger.error("❌ No se pudieron crear las tablas después de varios intentos")
+                raise
+
+# Crear tablas con reintentos
+create_tables_with_retry()
+logger.info("📊 Base de datos inicializada correctamente")
 
 # ===========================================
 # FUNCIONES DE USUARIO
