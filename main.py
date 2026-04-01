@@ -3,6 +3,9 @@ import logging
 import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from fastapi import FastAPI, Request
+import uvicorn
+import threading
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -145,9 +148,93 @@ manual_payment_conv = ConversationHandler(
 telegram_app.add_handler(manual_payment_conv)
 
 # ===========================================
-# INICIAR BOT CON POLLING
+# FUNCIONES PARA NOTIFICACIONES (cron-job)
 # ===========================================
+async def check_expiring_links():
+    """Revisa links que expiran pronto y envía notificaciones"""
+    try:
+        from database.database import get_expiring_links, get_user
+
+        checkpoints = [48, 24, 15, 10, 5, 2, 1]
+
+        for hours in checkpoints:
+            expiring_links = get_expiring_links(hours)
+
+            for link in expiring_links:
+                user_id = link.user_id
+                user = get_user(user_id)
+
+                if not user:
+                    continue
+
+                if hours == 48:
+                    message = (
+                        f"⏰ **Tu link expira en 48 horas.**\n\n"
+                        f"🔗 `{link.url}`\n\n"
+                        f"Actualiza a VIP para extender la promoción a 30 días sin perder reputación.\n\n"
+                        f"⭐ Usa el botón VIP para más información."
+                    )
+                elif hours <= 24:
+                    message = (
+                        f"⚠️ **¡Tu link expira en {hours} horas!**\n\n"
+                        f"🔗 `{link.url}`\n\n"
+                        f"Renueva con VIP para mantener tu reputación y extender la promoción.\n\n"
+                        f"⭐ Usa el botón VIP para más información."
+                    )
+                else:
+                    message = (
+                        f"🔔 **Recordatorio:** Tu link expira en {hours} horas.\n\n"
+                        f"🔗 `{link.url}`\n\n"
+                        f"¡Asegura tu reputación con VIP!"
+                    )
+
+                try:
+                    await telegram_app.bot.send_message(
+                        chat_id=user_id,
+                        text=message,
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⭐ VIP", callback_data="vip_info")]]),
+                        parse_mode='Markdown'
+                    )
+                    logger.info(f"✅ Notificación enviada a {user_id}: expira en {hours}h")
+                except Exception as e:
+                    logger.error(f"❌ Error enviando notificación a {user_id}: {e}")
+
+    except Exception as e:
+        logger.error(f"❌ Error en check_expiring_links: {e}")
+
+# ===========================================
+# SERVIDOR WEB PARA CRON-JOB.ORG
+# ===========================================
+app = FastAPI()
+
+@app.get("/")
+@app.get("/healthcheck")
+async def health():
+    return {"status": "ok", "service": "LinkForge"}
+
+@app.get("/check_expiring")
+async def trigger_expiring_check():
+    """Endpoint para que cron-job.org active las notificaciones de expiración"""
+    try:
+        await check_expiring_links()
+        return {"status": "ok", "message": "Notificaciones de expiración procesadas"}
+    except Exception as e:
+        logger.error(f"❌ Error en /check_expiring: {e}")
+        return {"status": "error", "message": str(e)}
+
+# ===========================================
+# INICIAR BOT CON POLLING + SERVIDOR WEB
+# ===========================================
+def run_web_server():
+    """Ejecuta el servidor web en un hilo separado"""
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
 async def main():
+    # Iniciar servidor web en hilo separado
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
+    logger.info("🌐 Servidor web iniciado en puerto 8080")
+
     await telegram_app.initialize()
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
     logger.info("✅ Webhook eliminado")
