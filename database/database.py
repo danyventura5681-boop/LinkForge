@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 # Leer URL de base de datos desde variable de entorno
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# LOG DE DIAGNÓSTICO
+logger.info(f"🔍 DATABASE_URL encontrada: {'SI' if DATABASE_URL else 'NO'}")
+if DATABASE_URL:
+    # Mostrar solo los primeros 30 caracteres por seguridad
+    logger.info(f"🔍 DATABASE_URL (primeros 30 chars): {DATABASE_URL[:30]}...")
+
 # Si no hay DATABASE_URL, usar SQLite local (fallback)
 if not DATABASE_URL:
     from pathlib import Path
@@ -27,12 +33,16 @@ else:
     logger.info(f"✅ Usando PostgreSQL desde DATABASE_URL")
 
 # Configurar engine
-if DATABASE_URL.startswith("postgresql"):
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-    logger.info("✅ Conectado a PostgreSQL (Supabase)")
-else:
-    engine = create_engine(DATABASE_URL)
-    logger.info("✅ Conectado a SQLite")
+try:
+    if DATABASE_URL.startswith("postgresql"):
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+        logger.info("✅ Conectado a PostgreSQL (Supabase)")
+    else:
+        engine = create_engine(DATABASE_URL)
+        logger.info("✅ Conectado a SQLite")
+except Exception as e:
+    logger.error(f"❌ Error de conexión a la base de datos: {e}")
+    raise
 
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -102,8 +112,14 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # Crear tablas si no existen
-Base.metadata.create_all(engine)
-logger.info("✅ Tablas creadas/verificadas")
+try:
+    Base.metadata.create_all(engine)
+    logger.info("✅ Tablas creadas/verificadas correctamente")
+except Exception as e:
+    logger.error(f"❌ Error al crear tablas: {e}")
+    raise
+
+logger.info("📊 Base de datos inicializada correctamente")
 
 # ===========================================
 # FUNCIONES DE USUARIO
@@ -112,10 +128,10 @@ logger.info("✅ Tablas creadas/verificadas")
 def create_user(telegram_id: int, username: str = None, referred_by: int = None):
     """Crea un usuario nuevo."""
     session = SessionLocal()
-    
+
     user = User(telegram_id=telegram_id, username=username, referred_by=referred_by)
     session.add(user)
-    
+
     # Si fue referido, dar reputación al referente
     if referred_by:
         referrer = session.query(User).filter_by(telegram_id=referred_by).first()
@@ -123,7 +139,7 @@ def create_user(telegram_id: int, username: str = None, referred_by: int = None)
             referrer.reputation += 50
             referral = Referral(referrer_id=referred_by, referred_id=telegram_id, reputation_earned=50)
             session.add(referral)
-    
+
     session.commit()
     session.close()
 
@@ -302,21 +318,21 @@ def get_user_rank(telegram_id: int) -> int:
 def record_click(user_id: int, link_id: int, reputation_earned: int = 5):
     """Registra un clic a un link y da reputación al que clicó."""
     session = SessionLocal()
-    
+
     # Registrar clic
     click = Click(user_id=user_id, link_id=link_id, reputation_earned=reputation_earned)
     session.add(click)
-    
+
     # Dar reputación al que clicó
     user = session.query(User).filter_by(telegram_id=user_id).first()
     if user:
         user.reputation += reputation_earned
-    
+
     # Aumentar contador de clics del link
     link = session.query(Link).filter_by(id=link_id).first()
     if link:
         link.clicks_received += 1
-    
+
     session.commit()
     session.close()
 
@@ -333,13 +349,13 @@ def activate_vip(telegram_id: int, vip_level: int, days: int = 30, reputation_bo
         user.vip_level = vip_level
         user.vip_expires_at = expires_at
         user.reputation += reputation_bonus
-        
+
         # Extender links existentes
         session.query(Link).filter(
             Link.user_id == telegram_id,
             Link.expires_at > datetime.utcnow()
         ).update({"expires_at": Link.expires_at + timedelta(days=days)})
-        
+
         session.commit()
     session.close()
 
@@ -370,9 +386,9 @@ def confirm_payment(tx_hash: str):
         # Mapeo de reputación por plan
         bonus_map = {1: 500, 2: 2800, 3: 6000}
         reputation_bonus = bonus_map.get(payment.vip_level, 0)
-        
+
         activate_vip(payment.user_id, payment.vip_level, 30, reputation_bonus)
-        
+
         payment.status = 'confirmed'
         payment.confirmed_at = datetime.utcnow()
         session.commit()
