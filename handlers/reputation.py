@@ -10,8 +10,12 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"🎁 earn_reputation: Usuario {user_id} solicitó ganar reputación")
 
+    # Obtener top 10 usuarios
     top_users = get_top_users(limit=10)
-    available_users = [u for u in top_users if u.telegram_id != user_id][:5]
+    
+    # NO excluir al administrador de la lista
+    # Mostrar los primeros 5 (incluyendo al admin si está en el top)
+    available_users = top_users[:5]
 
     if not available_users:
         text = (
@@ -86,6 +90,7 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     logger.info(f"🔗 visit_link: Usuario {user_id} visitó link de {target_user_id}")
 
+    # No permitir visitar tu propio link (ni siquiera al admin)
     if user_id == target_user_id:
         await query.edit_message_text(
             "❌ No puedes visitar tu propio link.",
@@ -101,6 +106,7 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # Dar reputación al usuario que hizo clic (admin también puede ganar)
     add_reputation(user_id, 5)
     logger.info(f"✅ +5 reputación para usuario {user_id}")
 
