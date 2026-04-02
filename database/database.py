@@ -1,6 +1,30 @@
 import os
 import logging
 import time
+
+logger = logging.getLogger(__name__)
+
+# ===========================================
+# DIAGNÓSTICO DE VARIABLES DE ENTORNO
+# ===========================================
+logger.info("🔍 DIAGNÓSTICO: Variables de entorno disponibles:")
+for key in sorted(os.environ.keys()):
+    if "DATABASE" in key.upper() or "POSTGRES" in key.upper() or "URL" in key.upper():
+        # Mostrar solo primeros 20 chars por seguridad
+        value = os.environ[key]
+        logger.info(f"   {key} = {value[:30]}..." if len(value) > 30 else f"   {key} = {value}")
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+logger.info(f"🔍 DATABASE_URL leída: {'SI' if DATABASE_URL else 'NO'}")
+
+if not DATABASE_URL:
+    logger.error("❌ DATABASE_URL NO encontrada en variables de entorno")
+    logger.info("🔍 Posibles causas:")
+    logger.info("   1. La variable no está configurada en Railway")
+    logger.info("   2. La variable está en Shared Variables pero no en Service Variables")
+    logger.info("   3. La variable se agregó después del último deploy")
+else:
+    logger.info(f"✅ DATABASE_URL encontrada (primeros 30 chars): {DATABASE_URL[:30]}...")
 from datetime import datetime, timedelta
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Float, Boolean, BigInteger, Text
 from sqlalchemy.ext.declarative import declarative_base
