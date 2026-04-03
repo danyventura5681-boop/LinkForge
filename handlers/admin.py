@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 # Estados para conversaciones
 WAITING_USER_ID = 1
 WAITING_REPUTATION = 2
+WAITING_REDUCE_REPUTATION = 3
 
 ADMIN_ID = 5057900537  # Tu ID de Telegram
 
@@ -19,30 +20,36 @@ async def find_user(user_input: str):
     """Busca un usuario por ID o username de forma robusta."""
     user = None
     
-    logger.info(f"🔍 Buscando usuario: '{user_input}'")
+    logger.info(f"🔍 find_user: Buscando '{user_input}'")
     
     # Intentar primero como ID numérico
     try:
         user_id = int(user_input)
+        logger.info(f"🔍 find_user: Intentando búsqueda por ID: {user_id}")
         user = get_user(user_id)
-        logger.info(f"✅ Búsqueda por ID: {user_id} - Encontrado: {user is not None}")
         if user:
+            logger.info(f"✅ find_user: ENCONTRADO por ID - {user.telegram_id} (@{user.username})")
             return user
+        else:
+            logger.warning(f"❌ find_user: ID {user_id} no existe en BD")
     except ValueError:
-        logger.info(f"⚠️ '{user_input}' no es un número, intentando como username")
+        logger.info(f"⚠️ find_user: '{user_input}' no es número, buscando por username")
     except Exception as e:
-        logger.error(f"❌ Error buscando por ID: {e}")
+        logger.error(f"❌ find_user: Error buscando por ID: {e}")
     
     # Si no es número o no encontró, buscar por username
     try:
+        logger.info(f"🔍 find_user: Intentando búsqueda por username: {user_input}")
         user = get_user_by_username(user_input)
-        logger.info(f"✅ Búsqueda por username: '{user_input}' - Encontrado: {user is not None}")
         if user:
+            logger.info(f"✅ find_user: ENCONTRADO por username - {user.telegram_id} (@{user.username})")
             return user
+        else:
+            logger.warning(f"❌ find_user: Username '{user_input}' no existe en BD")
     except Exception as e:
-        logger.error(f"❌ Error buscando por username: {e}")
+        logger.error(f"❌ find_user: Error buscando por username: {e}")
     
-    logger.warning(f"❌ Usuario no encontrado: {user_input}")
+    logger.error(f"❌ find_user: FALLO TOTAL - No encontró '{user_input}' por ID ni por username")
     return None
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,6 +86,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("➕ Añadir reputación", callback_data="admin_add_reputation")],
+        [InlineKeyboardButton("➖ Reducir reputación", callback_data="admin_reduce_reputation")],
         [InlineKeyboardButton("👑 Hacer admin", callback_data="admin_make_admin")],
         [InlineKeyboardButton("🚫 Banear usuario", callback_data="admin_ban_user")],
         [InlineKeyboardButton("✅ Desbanear usuario", callback_data="admin_unban_user")],
@@ -129,7 +137,7 @@ async def add_reputation_start(update: Update, context: ContextTypes.DEFAULT_TYP
 async def add_reputation_get_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Obtiene el usuario y pide la cantidad."""
     user_input = update.message.text.strip()
-    logger.info(f"➕ Buscando usuario: {user_input}")
+    logger.info(f"➕ add_reputation_get_user: Buscando usuario: {user_input}")
 
     # ✅ MEJORADO: Usar función auxiliar robusta
     user = await find_user(user_input)
@@ -147,6 +155,7 @@ async def add_reputation_get_user(update: Update, context: ContextTypes.DEFAULT_
         return WAITING_USER_ID
 
     context.user_data['target_user'] = user
+    context.user_data['action_type'] = 'add'
     logger.info(f"✅ Usuario encontrado: {user.telegram_id} (@{user.username})")
 
     await update.message.reply_text(
@@ -159,6 +168,8 @@ async def add_reputation_get_user(update: Update, context: ContextTypes.DEFAULT_
 
 async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Añade la reputación al usuario."""
+    logger.info(f"➕ add_reputation_amount: Procesando cantidad de reputación")
+    
     try:
         amount = int(update.message.text.strip())
         logger.info(f"➕ Procesando añadir {amount} reputación")
@@ -171,6 +182,7 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
             return WAITING_REPUTATION
 
     except ValueError:
+        logger.error(f"❌ Entrada inválida, no es número: '{update.message.text}'")
         await update.message.reply_text(
             "❌ Ingresa un número válido.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
@@ -180,6 +192,7 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
     target_user = context.user_data.get('target_user')
 
     if not target_user:
+        logger.error(f"❌ target_user es None en context")
         await update.message.reply_text(
             "❌ Error: Usuario no encontrado. Intenta de nuevo.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
@@ -203,6 +216,120 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Limpiar contexto
     context.user_data.pop('target_user', None)
+    context.user_data.pop('action_type', None)
+
+    return ConversationHandler.END
+
+# ✅ NUEVO: REDUCIR REPUTACIÓN
+async def reduce_reputation_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Inicia el proceso para reducir reputación."""
+    query = update.callback_query
+    user_id = query.from_user.id
+
+    # ✅ VALIDAR QUE ES ADMIN ANTES DE CONTINUAR
+    if user_id != ADMIN_ID and not is_admin(user_id):
+        await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
+        logger.warning(f"⛔ Usuario {user_id} intentó acceder a reduce_reputation sin permisos")
+        return ConversationHandler.END
+
+    await query.answer()
+    logger.info(f"➖ reduce_reputation_start: Iniciando proceso para admin {user_id}")
+    await query.edit_message_text(
+        "🔍 **Ingresa el ID o username del usuario:**\n\n"
+        "Ejemplos:\n"
+        "- ID: `5057900537`\n"
+        "- Username: `danyvg56`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
+    )
+    return WAITING_USER_ID
+
+async def reduce_reputation_get_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Obtiene el usuario y pide la cantidad a reducir."""
+    user_input = update.message.text.strip()
+    logger.info(f"➖ reduce_reputation_get_user: Buscando usuario: {user_input}")
+
+    # ✅ Usar función auxiliar robusta
+    user = await find_user(user_input)
+
+    if not user:
+        logger.warning(f"❌ Usuario no encontrado: {user_input}")
+        await update.message.reply_text(
+            "❌ Usuario no encontrado. Intenta de nuevo.\n\n"
+            "💡 Puedes usar:\n"
+            "- Tu ID numérico (ejemplo: `5057900537`)\n"
+            "- Tu username sin @ (ejemplo: `danyvg56`)",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]]),
+            parse_mode='Markdown'
+        )
+        return WAITING_USER_ID
+
+    context.user_data['target_user'] = user
+    context.user_data['action_type'] = 'reduce'
+    logger.info(f"✅ Usuario encontrado: {user.telegram_id} (@{user.username})")
+
+    await update.message.reply_text(
+        f"✅ Usuario encontrado: @{user.username or user.telegram_id}\n"
+        f"💎 Reputación actual: {user.reputation} pts\n\n"
+        f"➖ **Ingresa la cantidad de reputación a reducir:**",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+    )
+    return WAITING_REDUCE_REPUTATION
+
+async def reduce_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Reduce la reputación del usuario."""
+    logger.info(f"➖ reduce_reputation_amount: Procesando cantidad a reducir")
+    
+    try:
+        amount = int(update.message.text.strip())
+        logger.info(f"➖ Procesando reducir {amount} reputación")
+
+        if amount <= 0:
+            await update.message.reply_text(
+                "❌ La cantidad debe ser mayor a 0.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+            )
+            return WAITING_REDUCE_REPUTATION
+
+    except ValueError:
+        logger.error(f"❌ Entrada inválida, no es número: '{update.message.text}'")
+        await update.message.reply_text(
+            "❌ Ingresa un número válido.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+        )
+        return WAITING_REDUCE_REPUTATION
+
+    target_user = context.user_data.get('target_user')
+
+    if not target_user:
+        logger.error(f"❌ target_user es None en context")
+        await update.message.reply_text(
+            "❌ Error: Usuario no encontrado. Intenta de nuevo.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
+        )
+        return ConversationHandler.END
+
+    # ✅ REDUCIR REPUTACIÓN Y CONFIRMAR
+    # Asegurar que no baje de 0
+    new_reputation = max(0, target_user.reputation - amount)
+    reduced_amount = target_user.reputation - new_reputation
+    
+    add_reputation(target_user.telegram_id, -reduced_amount)
+    
+    await update.message.reply_text(
+        f"✅ **¡Reputación reducida con éxito!**\n\n"
+        f"👤 Usuario: @{target_user.username or target_user.telegram_id}\n"
+        f"➖ Reputación reducida: **-{reduced_amount} pts**\n"
+        f"💎 Reputación anterior: {target_user.reputation} pts\n"
+        f"💎 Reputación nueva: **{new_reputation} pts**",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
+    )
+    logger.info(f"✅ Reputación reducida para usuario {target_user.telegram_id}: -{reduced_amount} pts")
+
+    # Limpiar contexto
+    context.user_data.pop('target_user', None)
+    context.user_data.pop('action_type', None)
 
     return ConversationHandler.END
 
