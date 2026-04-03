@@ -121,6 +121,66 @@ async def trigger_expiring_check():
         logger.error(f"❌ Error en /check_expiring: {e}")
         return {"status": "error", "message": str(e)}
 
+@app.get("/verify_payments")
+async def verify_payments_endpoint():
+    """
+    Endpoint para verificar pagos pendientes.
+    Puede ser llamado por cron-job cada 5-10 minutos.
+    
+    Ejemplo: https://tu-bot.railway.app/verify_payments
+    """
+    try:
+        logger.info("🔍 Iniciando verificación de pagos pendientes...")
+        
+        from services.blockchain import scan_pending_payments
+        results = scan_pending_payments()
+        
+        logger.info(f"✅ Verificación completada: {results}")
+        
+        return {
+            "status": "ok",
+            "message": "Pagos verificados",
+            "verified": results.get("verified", 0),
+            "failed": results.get("failed", 0),
+            "errors": results.get("errors", [])
+        }
+    except Exception as e:
+        logger.error(f"❌ Error en /verify_payments: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/check_all")
+async def check_all():
+    """
+    Ejecuta TODAS las verificaciones (expiring + payments).
+    Útil para un único cron-job que lo haga todo.
+    """
+    try:
+        logger.info("🔄 Ejecutando verificaciones completas...")
+        
+        # 1. Verificar links que expiran
+        await check_expiring_links()
+        logger.info("✅ Verificación de links completada")
+        
+        # 2. Verificar pagos pendientes
+        from services.blockchain import scan_pending_payments
+        payment_results = scan_pending_payments()
+        logger.info(f"✅ Verificación de pagos completada: {payment_results}")
+        
+        return {
+            "status": "ok",
+            "message": "Todas las verificaciones completadas",
+            "payments": payment_results
+        }
+    except Exception as e:
+        logger.error(f"❌ Error en /check_all: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 def run_web_server():
     """Ejecuta el servidor web en un hilo separado"""
     port = int(os.environ.get("PORT", 8080))
@@ -227,7 +287,7 @@ telegram_app.add_handler(manual_payment_conv)
 # ===========================================
 telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
 telegram_app.add_handler(CallbackQueryHandler(ranking_button_handler, pattern="^refresh_ranking$"))
-telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^link_"))  # ✅ CORREGIDO: link_1, link_2, etc.
+telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^link_"))
 telegram_app.add_handler(CallbackQueryHandler(more_links, pattern="^more_links$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
