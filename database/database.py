@@ -178,7 +178,7 @@ def get_user(telegram_id: int):
     session = SessionLocal()
     try:
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
-        
+
         # ✅ FIX: Acceder a los atributos para forzar la carga antes de cerrar sesión
         if user:
             _ = user.username
@@ -188,7 +188,7 @@ def get_user(telegram_id: int):
             logger.info(f"✅ get_user encontró usuario {telegram_id}: @{user.username} (rep: {user.reputation})")
         else:
             logger.warning(f"❌ get_user: Usuario {telegram_id} no existe")
-        
+
         return user
     except Exception as e:
         logger.error(f"❌ Error en get_user({telegram_id}): {e}")
@@ -201,7 +201,7 @@ def get_user_by_username(username: str):
     session = SessionLocal()
     try:
         user = session.query(User).filter_by(username=username).first()
-        
+
         # ✅ FIX: Acceder a los atributos para forzar la carga antes de cerrar sesión
         if user:
             _ = user.telegram_id
@@ -211,7 +211,7 @@ def get_user_by_username(username: str):
             logger.info(f"✅ get_user_by_username encontró: @{username} (ID: {user.telegram_id}, rep: {user.reputation})")
         else:
             logger.warning(f"❌ get_user_by_username: Username @{username} no existe")
-        
+
         return user
     except Exception as e:
         logger.error(f"❌ Error en get_user_by_username({username}): {e}")
@@ -366,7 +366,21 @@ def register_link(telegram_id: int, url: str, link_number: int = 1, days: int = 
         link = Link(user_id=telegram_id, url=url, link_number=link_number, expires_at=expires_at)
         session.add(link)
         session.commit()
-        logger.info(f"✅ register_link: Link regist_links: {len(links)} links activos para usuario {telegram_id}")
+        logger.info(f"✅ register_link: Link registrado para usuario {telegram_id} ({days} días)")
+    except Exception as e:
+        logger.error(f"❌ Error en register_link({telegram_id}): {e}")
+    finally:
+        session.close()
+
+def get_user_links(telegram_id: int):
+    """Obtiene todos los links activos de un usuario."""
+    session = SessionLocal()
+    try:
+        links = session.query(Link).filter(
+            Link.user_id == telegram_id,
+            Link.expires_at > datetime.utcnow()
+        ).order_by(Link.link_number).all()
+        logger.info(f"✅ get_user_links: {len(links)} links activos para usuario {telegram_id}")
         return links
     except Exception as e:
         logger.error(f"❌ Error en get_user_links({telegram_id}): {e}")
