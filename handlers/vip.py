@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from database.database import get_user, activate_vip, register_payment, get_user_links
+from database.database import get_user, activate_vip, register_payment, get_user_links, is_admin
 from config import VIP_PLANS, TRX_ADDRESS, TRX_PER_USD
 
 logger = logging.getLogger(__name__)
@@ -255,7 +255,7 @@ async def manual_payment_get_address(update: Update, context: ContextTypes.DEFAU
     return WAITING_PAYMENT_TX
 
 async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Recibe el hash y envía la información al admin."""
+    """Recibe el hash y envía la información al admin con mejor manejo de errores."""
     tx_hash = update.message.text.strip()
     if tx_hash.lower() == 'ninguno':
         tx_hash = "No proporcionado"
@@ -264,47 +264,85 @@ async def manual_payment_get_tx(update: Update, context: ContextTypes.DEFAULT_TY
     payment_hash = context.user_data.get('payment_hash')
     amount = context.user_data.get('manual_amount')
     address = context.user_data.get('manual_address')
+    user_id = update.effective_user.id
 
     plan = VIP_PLANS.get(pending_vip)
     expected_trx = get_trx_amount(plan['price_usd'])
 
-    # ADMIN_ID fijo (siempre al mismo administrador)
+    # 🛡️ MENSAJE MEJORADO PARA EL ADMIN CON MÁS INFORMACIÓN
     admin_text = (
-        f"🛡️ **Nuevo pago pendiente de verificación** 🛡️\n\n"
-        f"👤 Usuario: {update.effective_user.id}\n"
-        f"👤 Nombre: {update.effective_user.first_name}\n"
-        f"⭐ Plan: {plan['name']}\n"
-        f"💰 Monto enviado: {amount} TRX (esperado: {expected_trx} TRX)\n"
-        f"🏦 Dirección: `{address}`\n"
-        f"🔗 Hash TX: `{tx_hash}`\n"
-        f"📝 Código pago: `{payment_hash}`\n\n"
-        f"Para activar VIP, usa: `/confirmar {payment_hash}`"
+        f"🛡️ **NUEVO PAGO PENDIENTE DE VERIFICACIÓN** 🛡️\n\n"
+        f"👤 **Usuario:** {user_id}\n"
+        f"📱 **Nombre:** {update.effective_user.first_name or 'Sin nombre'}\n"
+        f"⭐ **Plan solicitado:** {plan['name']}\n"
+        f"💰 **Monto enviado:** {amount} TRX\n"
+        f"💰 **Monto esperado:** {expected_trx} TRX\n"
+        f"🏦 **Wallet origen:** `{address}`\n"
+        f"🔗 **Hash TX:** `{tx_hash}`\n"
+        f"📝 **Código de pago:** `{payment_hash}`\n"
+        f"⏰ **Timestamp:** {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC\n\n"
+        f"✅ **Para activar VIP usa:** `/confirmar {payment_hash}`\n"
+        f"❌ **Para rechazar:** Solo ignora y notifica al usuario"
     )
 
+    # 🔴 INTENTO DE ENVÍO AL ADMIN CON REINTENTOS Y MEJOR LOGGING
+    admin_notified = False
     try:
-        # Enviar al administrador (SIEMPRE al ADMIN_ID fijo)
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=admin_text,
             parse_mode='Markdown'
         )
-        logger.info(f"✅ Notificación de pago enviada al admin {ADMIN_ID}")
+        admin_notified = True
+        logger.info(f"✅ EXITOSO: Notificación de pago enviada al admin {ADMIN_ID} para usuario {user_id}")
+        logger.info(f"📝 Detalles: Payment Hash={payment_hash}, Amount={amount} TRX, Plan={plan['name']}")
         
-        # Confirmar al usuario (puede ser el mismo admin)
-        await update.message.reply_text(
-            f"✅ **¡Información enviada!**\n\n"
-            f"El administrador revisará tu pago y activará tu VIP en breve.\n\n"
-            f"📝 Tu código de pago: `{payment_hash}`\n\n"
-            f"Puedes contactar a @danyvg56 si tienes alguna duda.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]),
-            parse_mode='Markdown'
-        )
     except Exception as e:
-        logger.error(f"Error enviando notificación al admin: {e}")
-        await update.message.reply_text(
-            "❌ Error al enviar la información. Contacta a @danyvg56 directamente.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
+        logger.error(f"❌ ERROR AL ENVIAR AL ADMIN {ADMIN_ID}: {str(e)}")
+        logger.error(f"📝 Detalles fallidos: User={user_id}, Payment Hash={payment_hash}, Amount={amount}")
+        
+        # 🔄 INTENTAR REENVÍO CON MENSAJE SIMPLIFICADO
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"🛡️ PAGO MANUAL PENDIENTE\n\nUsuario: {user_id}\nPlan: {plan['name']}\nCódigo: `{payment_hash}`\nPara activar: `/confirmar {payment_hash}`",
+                parse_mode='Markdown'
+            )
+            admin_notified = True
+            logger.info(f"✅ REENVÍO EXITOSO (mensaje simplificado) al admin {ADMIN_ID}")
+        except Exception as e2:
+            logger.error(f"❌ REENVÍO FALLIDO: {str(e2)}")
+
+    # 📨 MENSAJE AL USUARIO
+    if admin_notified:
+        success_text = (
+            f"✅ **¡Información enviada al administrador!**\n\n"
+            f"Se ha enviado tu información de pago para verificación.\n\n"
+            f"📝 **Tu código de pago:** `{payment_hash}`\n"
+            f"⏳ **Tiempo estimado:** 5-15 minutos\n\n"
+            f"El administrador revisará tu pago y activará tu VIP en breve.\n\n"
+            f"Si tienes dudas, contacta a @danyvg56"
         )
+        logger.info(f"📨 Confirmación enviada al usuario {user_id}")
+    else:
+        success_text = (
+            f"⚠️ **Problema al enviar información al admin**\n\n"
+            f"Tu información fue registrada pero hubo un error al notificar al administrador.\n\n"
+            f"📝 **Tu código de pago:** `{payment_hash}`\n\n"
+            f"**Por favor, contacta directamente a @danyvg56 con tu código de pago.**\n"
+            f"Proporciona:\n"
+            f"• Código de pago: {payment_hash}\n"
+            f"• Monto enviado: {amount} TRX\n"
+            f"• Wallet: {address}\n"
+            f"• Hash TX: {tx_hash}"
+        )
+        logger.warning(f"⚠️ Usuario {user_id} debe contactar admin manualmente. Payment Hash: {payment_hash}")
+
+    await update.message.reply_text(
+        success_text,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]),
+        parse_mode='Markdown'
+    )
 
     # Limpiar contexto
     context.user_data.pop('pending_vip', None)
