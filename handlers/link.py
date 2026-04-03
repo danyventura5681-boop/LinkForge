@@ -93,6 +93,13 @@ async def process_link_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
 
+    # ✅ FIX 1: BORRAR EL MENSAJE DEL USUARIO INMEDIATAMENTE
+    try:
+        await update.message.delete()
+        logger.info(f"✅ Mensaje del usuario {telegram_id} borrado")
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudo borrar mensaje del usuario {telegram_id}: {e}")
+
     # Validar URL
     if not is_valid_url(url):
         logger.info(f"❌ URL no válida: {url}")
