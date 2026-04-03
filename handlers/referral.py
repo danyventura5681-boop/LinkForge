@@ -52,35 +52,95 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     logger.info(f"🔗 process_referral: Args recibidos: {args}")
 
-    if args and args[0].startswith('ref_'):
+    # ✅ Validar que exista el argumento de referido
+    if not args or not args[0].startswith('ref_'):
+        logger.info("⚠️ No hay referido en los args")
+        return
+
+    try:
         referrer_id = int(args[0][4:])
-        user_id = update.effective_user.id
-        username = update.effective_user.username or update.effective_user.first_name or "Usuario"
-        logger.info(f"🔗 Referido: user {user_id} vino por enlace de {referrer_id}")
+    except (ValueError, IndexError) as e:
+        logger.error(f"❌ Error parseando referrer_id: {e}")
+        return
 
-        if user_id == referrer_id:
-            logger.info("⚠️ Usuario intentó referirse a sí mismo")
-            return
+    user_id = update.effective_user.id
+    username = update.effective_user.username or update.effective_user.first_name or "Usuario"
+    
+    logger.info(f"🔗 process_referral: Usuario {user_id} (@{username}) vino por enlace de referente {referrer_id}")
 
-        existing_user = get_user(user_id)
-        if existing_user:
-            logger.info(f"⚠️ Usuario {user_id} ya existe, no se da recompensa")
-            return
-
-        # Crear usuario con referido
-        create_user(user_id, username, referred_by=referrer_id)
-        logger.info(f"✅ Usuario {user_id} creado con referido {referrer_id}")
-
+    # ✅ NO permitir auto-referidos
+    if user_id == referrer_id:
+        logger.warning(f"⚠️ Usuario {user_id} intentó referirse a sí mismo")
         try:
-            await context.bot.send_message(
-                chat_id=referrer_id,
-                text=f"🎉 **¡Alguien se unió por tu enlace!**\n\n"
-                     f"👤 Nuevo usuario: {username}\n"
-                     f"🎁 +50 reputación añadida a tu cuenta.\n\n"
-                     f"📊 Usa el botón 'Invitar Amigos' para ver tu enlace personal.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Ver panel", callback_data="volver_menu")]]),
-                parse_mode='Markdown'
+            await update.message.reply_text(
+                "❌ No puedes usar tu propio enlace de referido.\n\n"
+                "🔗 Comparte tu enlace con otros usuarios para ganar reputación.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
             )
-            logger.info(f"✅ Notificación enviada al referente {referrer_id}")
         except Exception as e:
-            logger.error(f"❌ Error notificando al referente {referrer_id}: {e}")
+            logger.error(f"❌ Error enviando mensaje de auto-referido: {e}")
+        return
+
+    # ✅ Verificar que el usuario no sea duplicado en la BD
+    existing_user = get_user(user_id)
+    if existing_user:
+        logger.info(f"⚠️ Usuario {user_id} ya existe en BD, verificando si tiene referente...")
+        
+        # ✅ Si ya existe pero NO tiene referente, asignarle ahora
+        if existing_user.referred_by is None:
+            logger.info(f"🔗 Asignando referente {referrer_id} al usuario existente {user_id}")
+            # Necesitamos actualizar la BD
+            from database.database import SessionLocal
+            session = SessionLocal()
+            try:
+                user_obj = session.query(get_user.__self__).filter_by(telegram_id=user_id).first()
+                if user_obj:
+                    user_obj.referred_by = referrer_id
+                    session.commit()
+                    logger.info(f"✅ Referente asignado a usuario existente {user_id}")
+                    
+                    # Dar reputación al referente
+                    add_reputation(referrer_id, 50)
+                    logger.info(f"✅ +50 reputación dado a referente {referrer_id}")
+                    
+                    # Notificar
+                    try:
+                        await context.bot.send_message(
+                            chat_id=referrer_id,
+                            text=f"🎉 **¡Un usuario existente confirmó tu referencia!**\n\n"
+                                 f"👤 Usuario: @{username}\n"
+                                 f"🎁 +50 reputación añadida a tu cuenta.\n\n"
+                                 f"📊 Usa el botón 'Invitar Amigos' para ver tu enlace personal.",
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Ver panel", callback_data="volver_menu")]]),
+                            parse_mode='Markdown'
+                        )
+                        logger.info(f"✅ Notificación enviada al referente {referrer_id}")
+                    except Exception as e:
+                        logger.error(f"❌ Error notificando al referente {referrer_id}: {e}")
+            except Exception as e:
+                logger.error(f"❌ Error asignando referente: {e}")
+            finally:
+                session.close()
+        else:
+            logger.info(f"⚠️ Usuario {user_id} ya tiene referente {existing_user.referred_by}, no se da recompensa")
+        return
+
+    # ✅ Usuario NUEVO: crear con referido
+    logger.info(f"👤 Usuario {user_id} es nuevo, creando con referido {referrer_id}")
+    create_user(user_id, username, referred_by=referrer_id)
+    logger.info(f"✅ Usuario {user_id} creado con referido {referrer_id}, +50 rep para referente")
+
+    # ✅ Notificar al referente
+    try:
+        await context.bot.send_message(
+            chat_id=referrer_id,
+            text=f"🎉 **¡Alguien se unió por tu enlace!**\n\n"
+                 f"👤 Nuevo usuario: @{username}\n"
+                 f"🎁 +50 reputación añadida a tu cuenta.\n\n"
+                 f"📊 Usa el botón 'Invitar Amigos' para ver tu enlace personal.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Ver panel", callback_data="volver_menu")]]),
+            parse_mode='Markdown'
+        )
+        logger.info(f"✅ Notificación enviada al referente {referrer_id}")
+    except Exception as e:
+        logger.error(f"❌ Error notificando al referente {referrer_id}: {e}")
