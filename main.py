@@ -130,54 +130,7 @@ def run_web_server():
 telegram_app = Application.builder().token(TOKEN).build()
 
 # ===========================================
-# HANDLERS DE COMANDOS
-# ===========================================
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))
-
-# Handler para referidos (sin comando, desde el enlace)
-telegram_app.add_handler(CommandHandler("start", process_referral))
-
-# ===========================================
-# HANDLERS DE MENSAJES (MODO CONVERSACIÓN)
-# ===========================================
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
-
-# ===========================================
-# HANDLERS DE CALLBACKS (ORDEN CORRECTO)
-# ===========================================
-
-# 1. Handler para volver al menú (prioridad alta)
-telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
-
-# 2. Handler para ranking
-telegram_app.add_handler(CallbackQueryHandler(ranking_button_handler, pattern="^refresh_ranking$"))
-
-# 3. Handler para reputación
-telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^visit_link_"))
-telegram_app.add_handler(CallbackQueryHandler(more_links, pattern="^more_links$"))
-
-# 4. Handler para links
-telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
-telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
-telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern="^cancel_register$"))
-
-# 5. Handler para VIP
-telegram_app.add_handler(CallbackQueryHandler(vip_menu, pattern="^vip_menu$"))
-telegram_app.add_handler(CallbackQueryHandler(buy_vip, pattern="^buy_vip_"))
-telegram_app.add_handler(CallbackQueryHandler(check_payment, pattern="^check_payment$"))
-telegram_app.add_handler(CallbackQueryHandler(check_payment_retry, pattern="^check_payment_retry$"))
-telegram_app.add_handler(CallbackQueryHandler(manual_payment_start, pattern="^manual_payment$"))
-
-# 6. Handler para admin - acciones directas
-telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
-telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_users$"))
-
-# 7. Handler general de botones principales
-telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
-
-# ===========================================
-# CONVERSATION HANDLERS PARA ADMIN
+# 1. PRIMERO: CONVERSATION HANDLERS
 # ===========================================
 admin_add_reputation_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_reputation_start, pattern="^admin_add_reputation$")],
@@ -216,9 +169,6 @@ admin_unban_user_conv = ConversationHandler(
 )
 telegram_app.add_handler(admin_unban_user_conv)
 
-# ===========================================
-# CONVERSATION HANDLER PARA PAGO MANUAL VIP
-# ===========================================
 manual_payment_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(manual_payment_start, pattern="^manual_payment$")],
     states={
@@ -229,6 +179,37 @@ manual_payment_conv = ConversationHandler(
     fallbacks=[CommandHandler("cancel", cancel_admin)],
 )
 telegram_app.add_handler(manual_payment_conv)
+
+# ===========================================
+# 2. SEGUNDO: MESSAGE HANDLER (solo para registro de links)
+# ===========================================
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
+
+# ===========================================
+# 3. TERCERO: CALLBACK QUERY HANDLERS
+# ===========================================
+telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
+telegram_app.add_handler(CallbackQueryHandler(ranking_button_handler, pattern="^refresh_ranking$"))
+telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^visit_link_"))
+telegram_app.add_handler(CallbackQueryHandler(more_links, pattern="^more_links$"))
+telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
+telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
+telegram_app.add_handler(CallbackQueryHandler(cancel_register_callback, pattern="^cancel_register$"))
+telegram_app.add_handler(CallbackQueryHandler(vip_menu, pattern="^vip_menu$"))
+telegram_app.add_handler(CallbackQueryHandler(buy_vip, pattern="^buy_vip_"))
+telegram_app.add_handler(CallbackQueryHandler(check_payment, pattern="^check_payment$"))
+telegram_app.add_handler(CallbackQueryHandler(check_payment_retry, pattern="^check_payment_retry$"))
+telegram_app.add_handler(CallbackQueryHandler(manual_payment_start, pattern="^manual_payment$"))
+telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
+telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_users$"))
+telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+
+# ===========================================
+# 4. CUARTO: COMMAND HANDLERS
+# ===========================================
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))
+telegram_app.add_handler(CommandHandler("start", process_referral))
 
 # ===========================================
 # INICIAR BOT CON POLLING + SERVIDOR WEB
