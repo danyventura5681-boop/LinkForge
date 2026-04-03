@@ -40,7 +40,9 @@ from handlers.vip import (
 )
 
 # Estados para conversación (admin)
-WAITING_USER_ID, WAITING_REPUTATION, WAITING_REDUCE_REPUTATION = range(3)
+WAITING_USER_ID = 1
+WAITING_REPUTATION = 2
+WAITING_REDUCE_REPUTATION = 3
 
 # ===========================================
 # FUNCIONES PARA NOTIFICACIONES (cron-job)
@@ -138,56 +140,77 @@ telegram_app.add_handler(CommandHandler("start", process_referral))
 telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))
 
 # ===========================================
-# 2. SEGUNDO: CONVERSATION HANDLERS (antes de MessageHandler)
+# 2. SEGUNDO: CONVERSATION HANDLERS (ANTES DE CALLBACK)
 # ===========================================
-admin_add_reputation_conv = ConversationHandler(
+
+# ✅ HANDLER PARA AÑADIR REPUTACIÓN
+add_reputation_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_reputation_start, pattern="^admin_add_reputation$")],
     states={
         WAITING_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_reputation_get_user)],
         WAITING_REPUTATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_reputation_amount)],
     },
-    fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
+    fallbacks=[
+        CallbackQueryHandler(cancel_admin, pattern="^admin_panel$"),
+        CommandHandler("cancel", cancel_admin),
+    ],
 )
-telegram_app.add_handler(admin_add_reputation_conv)
+telegram_app.add_handler(add_reputation_conv)
 
-# ✅ NUEVO: HANDLER PARA REDUCIR REPUTACIÓN
-admin_reduce_reputation_conv = ConversationHandler(
+# ✅ HANDLER PARA REDUCIR REPUTACIÓN
+reduce_reputation_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(reduce_reputation_start, pattern="^admin_reduce_reputation$")],
     states={
         WAITING_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, reduce_reputation_get_user)],
         WAITING_REDUCE_REPUTATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, reduce_reputation_amount)],
     },
-    fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
+    fallbacks=[
+        CallbackQueryHandler(cancel_admin, pattern="^admin_panel$"),
+        CommandHandler("cancel", cancel_admin),
+    ],
 )
-telegram_app.add_handler(admin_reduce_reputation_conv)
+telegram_app.add_handler(reduce_reputation_conv)
 
-admin_make_admin_conv = ConversationHandler(
+# ✅ HANDLER PARA HACER ADMIN
+make_admin_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(make_admin_action, pattern="^admin_make_admin$")],
     states={
         WAITING_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, make_admin_process)],
     },
-    fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
+    fallbacks=[
+        CallbackQueryHandler(cancel_admin, pattern="^admin_panel$"),
+        CommandHandler("cancel", cancel_admin),
+    ],
 )
-telegram_app.add_handler(admin_make_admin_conv)
+telegram_app.add_handler(make_admin_conv)
 
-admin_ban_user_conv = ConversationHandler(
+# ✅ HANDLER PARA BANEAR USUARIO
+ban_user_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(ban_user_action, pattern="^admin_ban_user$")],
     states={
         WAITING_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, ban_user_process)],
     },
-    fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
+    fallbacks=[
+        CallbackQueryHandler(cancel_admin, pattern="^admin_panel$"),
+        CommandHandler("cancel", cancel_admin),
+    ],
 )
-telegram_app.add_handler(admin_ban_user_conv)
+telegram_app.add_handler(ban_user_conv)
 
-admin_unban_user_conv = ConversationHandler(
+# ✅ HANDLER PARA DESBANEAR USUARIO
+unban_user_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(unban_user_action, pattern="^admin_unban_user$")],
     states={
         WAITING_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, unban_user_process)],
     },
-    fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
+    fallbacks=[
+        CallbackQueryHandler(cancel_admin, pattern="^admin_panel$"),
+        CommandHandler("cancel", cancel_admin),
+    ],
 )
-telegram_app.add_handler(admin_unban_user_conv)
+telegram_app.add_handler(unban_user_conv)
 
+# ✅ HANDLER PARA PAGO MANUAL
 manual_payment_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(manual_payment_start, pattern="^manual_payment$")],
     states={
