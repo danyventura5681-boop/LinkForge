@@ -29,7 +29,8 @@ from handlers.reputation import earn_reputation, visit_link, more_links
 from handlers.referral import referral, process_referral
 from handlers.admin import (
     admin_panel, add_reputation_start, add_reputation_get_user, 
-    add_reputation_amount, cancel_admin, make_admin_action, make_admin_process,
+    add_reputation_amount, reduce_reputation_start, reduce_reputation_get_user,
+    reduce_reputation_amount, cancel_admin, make_admin_action, make_admin_process,
     ban_user_action, ban_user_process, unban_user_action, unban_user_process, list_users
 )
 from handlers.vip import (
@@ -39,7 +40,7 @@ from handlers.vip import (
 )
 
 # Estados para conversación (admin)
-WAITING_USER_ID, WAITING_REPUTATION = range(2)
+WAITING_USER_ID, WAITING_REPUTATION, WAITING_REDUCE_REPUTATION = range(3)
 
 # ===========================================
 # FUNCIONES PARA NOTIFICACIONES (cron-job)
@@ -148,6 +149,17 @@ admin_add_reputation_conv = ConversationHandler(
     fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
 )
 telegram_app.add_handler(admin_add_reputation_conv)
+
+# ✅ NUEVO: HANDLER PARA REDUCIR REPUTACIÓN
+admin_reduce_reputation_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(reduce_reputation_start, pattern="^admin_reduce_reputation$")],
+    states={
+        WAITING_USER_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, reduce_reputation_get_user)],
+        WAITING_REDUCE_REPUTATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, reduce_reputation_amount)],
+    },
+    fallbacks=[CallbackQueryHandler(cancel_admin, pattern="^admin_panel$")],
+)
+telegram_app.add_handler(admin_reduce_reputation_conv)
 
 admin_make_admin_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(make_admin_action, pattern="^admin_make_admin$")],
