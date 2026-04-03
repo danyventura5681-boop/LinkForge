@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_top_users, get_user, add_reputation, get_user_links
+from database.database import get_top_users, get_user, add_reputation, get_user_links, record_click
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Obtener top 10 usuarios
     top_users = get_top_users(limit=10)
-    
+
     # NO excluir al administrador de la lista
     # Mostrar los primeros 5 (incluyendo al admin si está en el top)
     available_users = top_users[:5]
@@ -40,13 +40,17 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    context.user_data['available_links'] = [(u.telegram_id, u.username) for u in available_users]
-
+    # ✅ FIX: Guardar solo IDs y links (sin URL completa)
+    context.user_data['available_links'] = []
+    link_map = {}
+    
     text = "🎁 **Gana reputación** 🎁\n\n"
     text += "Haz clic en los links de otros usuarios para ganar **+5 reputación** cada uno.\n\n"
     text += "**Links disponibles:**\n\n"
 
     keyboard = []
+    link_counter = 1
+    
     for i, user in enumerate(available_users, 1):
         username = user.username or f"Usuario_{user.telegram_id}"
         text += f"{i}. @{username} - {user.reputation} pts\n"
@@ -54,11 +58,25 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Buscar link del usuario
         user_links = get_user_links(user.telegram_id)
         if user_links:
-            link_url = user_links[0].url
+            link = user_links[0]
+            link_url = link.url
+            link_id = link.id
+            
+            # ✅ FIX: Usar ID corto en callback_data
+            callback_id = f"link_{link_counter}"
+            link_map[callback_id] = {
+                'link_id': link_id,
+                'user_id': user.telegram_id,
+                'url': link_url,
+                'username': username
+            }
+            context.user_data['link_map'] = link_map
+            
             keyboard.append([InlineKeyboardButton(
-                f"🔗 Visitar link de @{username} (+5)",
-                callback_data=f"visit_link_{user.telegram_id}_{link_url}"
+                f"🔗 Visitar @{username} (+5)",
+                callback_data=callback_id
             )])
+            link_counter += 1
 
     keyboard.append([InlineKeyboardButton("🔄 Más links", callback_data="more_links")])
     keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")])
@@ -84,11 +102,26 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = query.from_user.id
-    parts = query.data.split("_")
-    target_user_id = int(parts[2])
-    link_url = "_".join(parts[3:]) if len(parts) > 3 else ""
+    callback_id = query.data  # Ejemplo: "link_1"
+    
+    logger.info(f"🔗 visit_link: Usuario {user_id} hizo clic en {callback_id}")
 
-    logger.info(f"🔗 visit_link: Usuario {user_id} visitó link de {target_user_id}")
+    # ✅ FIX: Obtener datos del mapa guardado
+    link_map = context.user_data.get('link_map', {})
+    
+    if callback_id not in link_map:
+        logger.warning(f"❌ Callback ID no encontrado: {callback_id}")
+        await query.edit_message_text(
+            "❌ Link no encontrado.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
+        )
+        return
+    
+    link_info = link_map[callback_id]
+    link_id = link_info['link_id']
+    target_user_id = link_info['user_id']
+    link_url = link_info['url']
+    username = link_info['username']
 
     # No permitir visitar tu propio link (ni siquiera al admin)
     if user_id == target_user_id:
@@ -106,16 +139,14 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Dar reputación al usuario que hizo clic (admin también puede ganar)
-    add_reputation(user_id, 5)
-    logger.info(f"✅ +5 reputación para usuario {user_id}")
-
-    username = target_user.username or f"Usuario_{target_user_id}"
+    # ✅ Registrar el clic y dar reputación
+    record_click(user_id, link_id, reputation_earned=5)
+    logger.info(f"✅ +5 reputación para usuario {user_id} por visitar link de {target_user_id}")
 
     await query.edit_message_text(
-        f"✅ **+5 reputación!**\n\n"
+        f"✅ **¡+5 reputación!**\n\n"
         f"Has visitado el link de **@{username}**\n\n"
-        f"🔗 Link visitado: {link_url}\n\n"
+        f"🔗 **Link visitado:** `{link_url}`\n\n"
         f"🎁 Sigue visitando links para ganar más puntos.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🎁 Ver más links", callback_data="more_links")],
