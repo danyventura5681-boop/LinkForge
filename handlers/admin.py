@@ -75,8 +75,16 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def add_reputation_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso para añadir reputación."""
     query = update.callback_query
+    user_id = query.from_user.id
+    
+    # ✅ FIX 1: VALIDAR QUE ES ADMIN ANTES DE CONTINUAR
+    if user_id != ADMIN_ID and not is_admin(user_id):
+        await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
+        logger.warning(f"⛔ Usuario {user_id} intentó acceder a add_reputation sin permisos")
+        return ConversationHandler.END
+    
     await query.answer()
-    logger.info("➕ add_reputation_start: Iniciando proceso")
+    logger.info(f"➕ add_reputation_start: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
         "🔍 **Ingresa el ID o username del usuario:**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
@@ -102,8 +110,12 @@ async def add_reputation_get_user(update: Update, context: ContextTypes.DEFAULT_
         return WAITING_USER_ID
 
     context.user_data['target_user'] = user
+    logger.info(f"✅ Usuario encontrado: {user.telegram_id} (@{user.username})")
+    
     await update.message.reply_text(
-        "💰 **Ingresa la cantidad de reputación a añadir:**",
+        f"✅ Usuario encontrado: @{user.username or user.telegram_id}\n"
+        f"💎 Reputación actual: {user.reputation} pts\n\n"
+        f"💰 **Ingresa la cantidad de reputación a añadir:**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
     )
     return WAITING_REPUTATION
@@ -112,7 +124,15 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
     """Añade la reputación al usuario."""
     try:
         amount = int(update.message.text.strip())
-        logger.info(f"➕ Añadiendo {amount} reputación")
+        logger.info(f"➕ Procesando añadir {amount} reputación")
+        
+        if amount <= 0:
+            await update.message.reply_text(
+                "❌ La cantidad debe ser mayor a 0.",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+            )
+            return WAITING_REPUTATION
+            
     except ValueError:
         await update.message.reply_text(
             "❌ Ingresa un número válido.",
@@ -120,23 +140,47 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return WAITING_REPUTATION
 
-    target_user = context.user_data['target_user']
+    target_user = context.user_data.get('target_user')
+    
+    if not target_user:
+        await update.message.reply_text(
+            "❌ Error: Usuario no encontrado. Intenta de nuevo.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
+        )
+        return ConversationHandler.END
+    
+    # ✅ FIX 2: AGREGAR REPUTACIÓN Y CONFIRMAR
     add_reputation(target_user.telegram_id, amount)
-
+    new_reputation = target_user.reputation + amount
+    
     await update.message.reply_text(
-        f"✅ Se añadieron **{amount} puntos** a @{target_user.username or target_user.telegram_id}\n"
-        f"Nueva reputación: {target_user.reputation + amount}",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
+        f"✅ **¡Reputación añadida con éxito!**\n\n"
+        f"👤 Usuario: @{target_user.username or target_user.telegram_id}\n"
+        f"➕ Reputación añadida: **+{amount} pts**\n"
+        f"💎 Reputación anterior: {target_user.reputation} pts\n"
+        f"💎 Reputación nueva: **{new_reputation} pts**",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
-    logger.info(f"✅ Reputación añadida a usuario {target_user.telegram_id}")
+    logger.info(f"✅ Reputación añadida a usuario {target_user.telegram_id}: +{amount} pts")
 
+    # Limpiar contexto
+    context.user_data.pop('target_user', None)
+    
     return ConversationHandler.END
 
 async def make_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Acción para hacer admin a un usuario (conversación)."""
     query = update.callback_query
+    user_id = query.from_user.id
+    
+    # ✅ FIX 3: VALIDAR ADMIN
+    if user_id != ADMIN_ID and not is_admin(user_id):
+        await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
+        return ConversationHandler.END
+    
     await query.answer()
-    logger.info("👑 make_admin_action: Iniciando proceso")
+    logger.info(f"👑 make_admin_action: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
         "👑 **Ingresa el ID o username del usuario a hacer admin:**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
@@ -171,7 +215,8 @@ async def make_admin_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await update.message.reply_text(
         f"✅ **@{user.username or user.telegram_id} ahora es administrador.**",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
     logger.info(f"👑 Usuario {user.telegram_id} ahora es admin")
 
@@ -192,8 +237,15 @@ async def make_admin_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def ban_user_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Acción para banear usuario (conversación)."""
     query = update.callback_query
+    user_id = query.from_user.id
+    
+    # ✅ FIX 4: VALIDAR ADMIN
+    if user_id != ADMIN_ID and not is_admin(user_id):
+        await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
+        return ConversationHandler.END
+    
     await query.answer()
-    logger.info("🚫 ban_user_action: Iniciando proceso")
+    logger.info(f"🚫 ban_user_action: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
         "🚫 **Ingresa el ID o username del usuario a banear:**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
@@ -228,7 +280,8 @@ async def ban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"✅ **@{user.username or user.telegram_id} ha sido baneado.**",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
     logger.info(f"🚫 Usuario {user.telegram_id} baneado")
 
@@ -248,8 +301,15 @@ async def ban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unban_user_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Acción para desbanear usuario (conversación)."""
     query = update.callback_query
+    user_id = query.from_user.id
+    
+    # ✅ FIX 5: VALIDAR ADMIN
+    if user_id != ADMIN_ID and not is_admin(user_id):
+        await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
+        return ConversationHandler.END
+    
     await query.answer()
-    logger.info("✅ unban_user_action: Iniciando proceso")
+    logger.info(f"✅ unban_user_action: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
         "✅ **Ingresa el ID o username del usuario a desbanear:**",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
@@ -284,7 +344,8 @@ async def unban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     await update.message.reply_text(
         f"✅ **@{user.username or user.telegram_id} ha sido desbaneado.**",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
     logger.info(f"✅ Usuario {user.telegram_id} desbaneado")
 
@@ -305,9 +366,17 @@ async def unban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra lista de usuarios."""
     query = update.callback_query
+    user_id = query.from_user.id
+    
+    # ✅ FIX 6: VALIDAR ADMIN
+    if user_id != ADMIN_ID and not is_admin(user_id):
+        await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
+        return
+    
     await query.answer()
-    logger.info("📋 list_users: Mostrando lista de usuarios")
+    logger.info(f"📋 list_users: Admin {user_id} solicitó lista de usuarios")
 
+    from database.database import get_all_users
     users = get_all_users()
 
     if not users:
