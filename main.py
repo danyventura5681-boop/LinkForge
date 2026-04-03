@@ -227,7 +227,7 @@ telegram_app.add_handler(manual_payment_conv)
 # ===========================================
 telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
 telegram_app.add_handler(CallbackQueryHandler(ranking_button_handler, pattern="^refresh_ranking$"))
-telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^visit_link_"))
+telegram_app.add_handler(CallbackQueryHandler(visit_link, pattern="^link_"))  # ✅ CORREGIDO: link_1, link_2, etc.
 telegram_app.add_handler(CallbackQueryHandler(more_links, pattern="^more_links$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_replace_link, pattern="^confirm_replace$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_add_link, pattern="^confirm_add_link$"))
