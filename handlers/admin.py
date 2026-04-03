@@ -14,6 +14,37 @@ WAITING_REPUTATION = 2
 
 ADMIN_ID = 5057900537  # Tu ID de Telegram
 
+# ✅ FUNCIÓN AUXILIAR para buscar usuarios de forma robusta
+async def find_user(user_input: str):
+    """Busca un usuario por ID o username de forma robusta."""
+    user = None
+    
+    logger.info(f"🔍 Buscando usuario: '{user_input}'")
+    
+    # Intentar primero como ID numérico
+    try:
+        user_id = int(user_input)
+        user = get_user(user_id)
+        logger.info(f"✅ Búsqueda por ID: {user_id} - Encontrado: {user is not None}")
+        if user:
+            return user
+    except ValueError:
+        logger.info(f"⚠️ '{user_input}' no es un número, intentando como username")
+    except Exception as e:
+        logger.error(f"❌ Error buscando por ID: {e}")
+    
+    # Si no es número o no encontró, buscar por username
+    try:
+        user = get_user_by_username(user_input)
+        logger.info(f"✅ Búsqueda por username: '{user_input}' - Encontrado: {user is not None}")
+        if user:
+            return user
+    except Exception as e:
+        logger.error(f"❌ Error buscando por username: {e}")
+    
+    logger.warning(f"❌ Usuario no encontrado: {user_input}")
+    return None
+
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra el panel de administración (solo para admin)."""
     user_id = update.effective_user.id
@@ -76,18 +107,22 @@ async def add_reputation_start(update: Update, context: ContextTypes.DEFAULT_TYP
     """Inicia el proceso para añadir reputación."""
     query = update.callback_query
     user_id = query.from_user.id
-    
+
     # ✅ FIX 1: VALIDAR QUE ES ADMIN ANTES DE CONTINUAR
     if user_id != ADMIN_ID and not is_admin(user_id):
         await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
         logger.warning(f"⛔ Usuario {user_id} intentó acceder a add_reputation sin permisos")
         return ConversationHandler.END
-    
+
     await query.answer()
     logger.info(f"➕ add_reputation_start: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
-        "🔍 **Ingresa el ID o username del usuario:**",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+        "🔍 **Ingresa el ID o username del usuario:**\n\n"
+        "Ejemplos:\n"
+        "- ID: `5057900537`\n"
+        "- Username: `danyvg56`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
     return WAITING_USER_ID
 
@@ -96,22 +131,24 @@ async def add_reputation_get_user(update: Update, context: ContextTypes.DEFAULT_
     user_input = update.message.text.strip()
     logger.info(f"➕ Buscando usuario: {user_input}")
 
-    # Buscar por ID o username
-    if user_input.isdigit():
-        user = get_user(int(user_input))
-    else:
-        user = get_user_by_username(user_input)
+    # ✅ MEJORADO: Usar función auxiliar robusta
+    user = await find_user(user_input)
 
     if not user:
+        logger.warning(f"❌ Usuario no encontrado: {user_input}")
         await update.message.reply_text(
-            "❌ Usuario no encontrado. Intenta de nuevo.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+            "❌ Usuario no encontrado. Intenta de nuevo.\n\n"
+            "💡 Puedes usar:\n"
+            "- Tu ID numérico (ejemplo: `5057900537`)\n"
+            "- Tu username sin @ (ejemplo: `danyvg56`)",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]]),
+            parse_mode='Markdown'
         )
         return WAITING_USER_ID
 
     context.user_data['target_user'] = user
     logger.info(f"✅ Usuario encontrado: {user.telegram_id} (@{user.username})")
-    
+
     await update.message.reply_text(
         f"✅ Usuario encontrado: @{user.username or user.telegram_id}\n"
         f"💎 Reputación actual: {user.reputation} pts\n\n"
@@ -125,14 +162,14 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         amount = int(update.message.text.strip())
         logger.info(f"➕ Procesando añadir {amount} reputación")
-        
+
         if amount <= 0:
             await update.message.reply_text(
                 "❌ La cantidad debe ser mayor a 0.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
             )
             return WAITING_REPUTATION
-            
+
     except ValueError:
         await update.message.reply_text(
             "❌ Ingresa un número válido.",
@@ -141,18 +178,18 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
         return WAITING_REPUTATION
 
     target_user = context.user_data.get('target_user')
-    
+
     if not target_user:
         await update.message.reply_text(
             "❌ Error: Usuario no encontrado. Intenta de nuevo.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
         )
         return ConversationHandler.END
-    
+
     # ✅ FIX 2: AGREGAR REPUTACIÓN Y CONFIRMAR
     add_reputation(target_user.telegram_id, amount)
     new_reputation = target_user.reputation + amount
-    
+
     await update.message.reply_text(
         f"✅ **¡Reputación añadida con éxito!**\n\n"
         f"👤 Usuario: @{target_user.username or target_user.telegram_id}\n"
@@ -166,24 +203,28 @@ async def add_reputation_amount(update: Update, context: ContextTypes.DEFAULT_TY
 
     # Limpiar contexto
     context.user_data.pop('target_user', None)
-    
+
     return ConversationHandler.END
 
 async def make_admin_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Acción para hacer admin a un usuario (conversación)."""
     query = update.callback_query
     user_id = query.from_user.id
-    
+
     # ✅ FIX 3: VALIDAR ADMIN
     if user_id != ADMIN_ID and not is_admin(user_id):
         await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
         return ConversationHandler.END
-    
+
     await query.answer()
     logger.info(f"👑 make_admin_action: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
-        "👑 **Ingresa el ID o username del usuario a hacer admin:**",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+        "👑 **Ingresa el ID o username del usuario a hacer admin:**\n\n"
+        "Ejemplos:\n"
+        "- ID: `5057900537`\n"
+        "- Username: `danyvg56`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
     return WAITING_USER_ID
 
@@ -192,12 +233,11 @@ async def make_admin_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_input = update.message.text.strip()
     logger.info(f"👑 Procesando hacer admin: {user_input}")
 
-    if user_input.isdigit():
-        user = get_user(int(user_input))
-    else:
-        user = get_user_by_username(user_input)
+    # ✅ MEJORADO: Usar función auxiliar robusta
+    user = await find_user(user_input)
 
     if not user:
+        logger.warning(f"❌ Usuario no encontrado: {user_input}")
         await update.message.reply_text(
             "❌ Usuario no encontrado.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
@@ -238,17 +278,21 @@ async def ban_user_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Acción para banear usuario (conversación)."""
     query = update.callback_query
     user_id = query.from_user.id
-    
+
     # ✅ FIX 4: VALIDAR ADMIN
     if user_id != ADMIN_ID and not is_admin(user_id):
         await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
         return ConversationHandler.END
-    
+
     await query.answer()
     logger.info(f"🚫 ban_user_action: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
-        "🚫 **Ingresa el ID o username del usuario a banear:**",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+        "🚫 **Ingresa el ID o username del usuario a banear:**\n\n"
+        "Ejemplos:\n"
+        "- ID: `5057900537`\n"
+        "- Username: `danyvg56`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
     return WAITING_USER_ID
 
@@ -257,12 +301,11 @@ async def ban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text.strip()
     logger.info(f"🚫 Procesando banear: {user_input}")
 
-    if user_input.isdigit():
-        user = get_user(int(user_input))
-    else:
-        user = get_user_by_username(user_input)
+    # ✅ MEJORADO: Usar función auxiliar robusta
+    user = await find_user(user_input)
 
     if not user:
+        logger.warning(f"❌ Usuario no encontrado: {user_input}")
         await update.message.reply_text(
             "❌ Usuario no encontrado.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
@@ -302,17 +345,21 @@ async def unban_user_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Acción para desbanear usuario (conversación)."""
     query = update.callback_query
     user_id = query.from_user.id
-    
+
     # ✅ FIX 5: VALIDAR ADMIN
     if user_id != ADMIN_ID and not is_admin(user_id):
         await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
         return ConversationHandler.END
-    
+
     await query.answer()
     logger.info(f"✅ unban_user_action: Iniciando proceso para admin {user_id}")
     await query.edit_message_text(
-        "✅ **Ingresa el ID o username del usuario a desbanear:**",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]])
+        "✅ **Ingresa el ID o username del usuario a desbanear:**\n\n"
+        "Ejemplos:\n"
+        "- ID: `5057900537`\n"
+        "- Username: `danyvg56`",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="admin_panel")]]),
+        parse_mode='Markdown'
     )
     return WAITING_USER_ID
 
@@ -321,12 +368,11 @@ async def unban_user_process(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_input = update.message.text.strip()
     logger.info(f"✅ Procesando desbanear: {user_input}")
 
-    if user_input.isdigit():
-        user = get_user(int(user_input))
-    else:
-        user = get_user_by_username(user_input)
+    # ✅ MEJORADO: Usar función auxiliar robusta
+    user = await find_user(user_input)
 
     if not user:
+        logger.warning(f"❌ Usuario no encontrado: {user_input}")
         await update.message.reply_text(
             "❌ Usuario no encontrado.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
@@ -367,12 +413,12 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra lista de usuarios."""
     query = update.callback_query
     user_id = query.from_user.id
-    
+
     # ✅ FIX 6: VALIDAR ADMIN
     if user_id != ADMIN_ID and not is_admin(user_id):
         await query.answer("⛔ No tienes permisos de administrador", show_alert=True)
         return
-    
+
     await query.answer()
     logger.info(f"📋 list_users: Admin {user_id} solicitó lista de usuarios")
 
