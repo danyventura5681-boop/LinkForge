@@ -130,7 +130,14 @@ def run_web_server():
 telegram_app = Application.builder().token(TOKEN).build()
 
 # ===========================================
-# 1. PRIMERO: CONVERSATION HANDLERS
+# 1. PRIMERO: COMMAND HANDLERS (máxima prioridad)
+# ===========================================
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("start", process_referral))
+telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))
+
+# ===========================================
+# 2. SEGUNDO: CONVERSATION HANDLERS (antes de MessageHandler)
 # ===========================================
 admin_add_reputation_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(add_reputation_start, pattern="^admin_add_reputation$")],
@@ -181,11 +188,6 @@ manual_payment_conv = ConversationHandler(
 telegram_app.add_handler(manual_payment_conv)
 
 # ===========================================
-# 2. SEGUNDO: MESSAGE HANDLER (solo para registro de links)
-# ===========================================
-telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
-
-# ===========================================
 # 3. TERCERO: CALLBACK QUERY HANDLERS
 # ===========================================
 telegram_app.add_handler(CallbackQueryHandler(back_to_start, pattern="^volver_menu$"))
@@ -205,11 +207,9 @@ telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_u
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
 
 # ===========================================
-# 4. CUARTO: COMMAND HANDLERS
+# 4. CUARTO: MESSAGE HANDLER (mínima prioridad - AL FINAL)
 # ===========================================
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))
-telegram_app.add_handler(CommandHandler("start", process_referral))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link_message))
 
 # ===========================================
 # INICIAR BOT CON POLLING + SERVIDOR WEB
