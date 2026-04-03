@@ -403,8 +403,19 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cancel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Cancela la conversación."""
-    await update.message.reply_text(
-        "❌ Operación cancelada.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]])
-    )
+    # ✅ FIX: Manejar tanto mensajes como callbacks
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text(
+            "❌ Operación cancelada.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            "❌ Operación cancelada.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
+            parse_mode='Markdown'
+        )
     return ConversationHandler.END
