@@ -3,7 +3,7 @@ import asyncio
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from database.database import (
+from database import (
     get_top_users, get_user, add_reputation, get_user_links, record_click,
     get_referrals_count, has_user_claimed_instagram
 )
