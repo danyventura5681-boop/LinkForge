@@ -123,6 +123,38 @@ class Notification(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 # ===========================================
+# NUEVOS MODELOS PARA VIDEOS (LinkForge 1.1)
+# ===========================================
+
+class Video(Base):
+    __tablename__ = 'videos'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger)
+    username = Column(String)
+    url = Column(Text)
+    title = Column(String)
+    views = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class VideoView(Base):
+    __tablename__ = 'video_views'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger)
+    video_id = Column(Integer)
+    reputation_earned = Column(Integer, default=30)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class InstagramVerification(Base):
+    __tablename__ = 'instagram_verifications'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger)
+    username = Column(String)
+    instagram_user = Column(String)
+    status = Column(String, default='pending')  # pending, approved, rejected
+    approved_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+# ===========================================
 # CREAR TABLAS CON REINTENTOS
 # ===========================================
 
@@ -169,12 +201,12 @@ def create_user(telegram_id: int, username: str = None, referred_by: int = None)
         if existing_user:
             logger.warning(f"⚠️ create_user: Usuario {telegram_id} ya existe")
             return existing_user
-        
+
         # Evitar auto-referido (que un usuario se refiera a sí mismo)
         if referred_by == telegram_id:
             logger.warning(f"⚠️ create_user: Auto-referido detectado para {telegram_id}, ignorando referido")
             referred_by = None
-        
+
         # Crear nuevo usuario
         user = User(
             telegram_id=telegram_id,
@@ -182,12 +214,12 @@ def create_user(telegram_id: int, username: str = None, referred_by: int = None)
             referred_by=referred_by
         )
         session.add(user)
-        
+
         # Lógica de referido CENTRALIZADA
         if referred_by:
             # Buscar al referente (la persona que invitó)
             referrer = session.query(User).filter_by(telegram_id=referred_by).first()
-            
+
             if referrer:
                 # Verificar que el referente no esté baneado
                 if referrer.is_banned:
@@ -196,7 +228,7 @@ def create_user(telegram_id: int, username: str = None, referred_by: int = None)
                     # Dar +50 reputación al referente
                     old_rep = referrer.reputation
                     referrer.reputation += 50
-                    
+
                     # Registrar la referencia
                     referral = Referral(
                         referrer_id=referred_by,
@@ -204,15 +236,15 @@ def create_user(telegram_id: int, username: str = None, referred_by: int = None)
                         reputation_earned=50
                     )
                     session.add(referral)
-                    
+
                     logger.info(f"✅ create_user: Referente {referred_by} ganó +50 reputación ({old_rep} → {referrer.reputation})")
             else:
                 logger.warning(f"⚠️ create_user: Referente {referred_by} no encontrado en la base de datos")
-        
+
         session.commit()
         logger.info(f"✅ create_user: Usuario {telegram_id} (@{username}) creado exitosamente con referido {referred_by}")
         return user
-        
+
     except Exception as e:
         logger.error(f"❌ Error en create_user({telegram_id}): {e}")
         session.rollback()
@@ -225,7 +257,7 @@ def get_user(telegram_id: int):
     session = SessionLocal()
     try:
         user = session.query(User).filter_by(telegram_id=telegram_id).first()
-        
+
         # ✅ FIX: Acceder a los atributos para forzar la carga antes de cerrar sesión
         if user:
             _ = user.username
@@ -235,7 +267,7 @@ def get_user(telegram_id: int):
             logger.info(f"✅ get_user encontró usuario {telegram_id}: @{user.username} (rep: {user.reputation})")
         else:
             logger.warning(f"❌ get_user: Usuario {telegram_id} no existe")
-        
+
         return user
     except Exception as e:
         logger.error(f"❌ Error en get_user({telegram_id}): {e}")
@@ -248,7 +280,7 @@ def get_user_by_username(username: str):
     session = SessionLocal()
     try:
         user = session.query(User).filter_by(username=username).first()
-        
+
         # ✅ FIX: Acceder a los atributos para forzar la carga antes de cerrar sesión
         if user:
             _ = user.telegram_id
@@ -258,7 +290,7 @@ def get_user_by_username(username: str):
             logger.info(f"✅ get_user_by_username encontró: @{username} (ID: {user.telegram_id}, rep: {user.reputation})")
         else:
             logger.warning(f"❌ get_user_by_username: Username @{username} no existe")
-        
+
         return user
     except Exception as e:
         logger.error(f"❌ Error en get_user_by_username({username}): {e}")
@@ -558,17 +590,17 @@ def record_click(user_id: int, link_id: int, reputation_earned: int = 5):
         # Registrar clic
         click = Click(user_id=user_id, link_id=link_id, reputation_earned=reputation_earned)
         session.add(click)
-        
+
         # Dar reputación al que clicó
         user = session.query(User).filter_by(telegram_id=user_id).first()
         if user:
             user.reputation += reputation_earned
-        
+
         # Aumentar contador de clics del link
         link = session.query(Link).filter_by(id=link_id).first()
         if link:
             link.clicks_received += 1
-        
+
         session.commit()
         logger.info(f"✅ record_click: Usuario {user_id} ganó +{reputation_earned} rep del link {link_id}")
     except Exception as e:
@@ -597,7 +629,7 @@ def reset_expired_links_reputation(telegram_id: int):
             Link.user_id == telegram_id,
             Link.expires_at > datetime.utcnow()
         ).count()
-        
+
         if active_links == 0:
             user = session.query(User).filter_by(telegram_id=telegram_id).first()
             if user:
@@ -624,13 +656,13 @@ def activate_vip(telegram_id: int, vip_level: int, days: int = 30, reputation_bo
             user.vip_level = vip_level
             user.vip_expires_at = expires_at
             user.reputation += reputation_bonus
-            
+
             # Extender links existentes
             session.query(Link).filter(
                 Link.user_id == telegram_id,
                 Link.expires_at > datetime.utcnow()
             ).update({"expires_at": Link.expires_at + timedelta(days=days)})
-            
+
             session.commit()
             logger.info(f"✅ activate_vip: Usuario {telegram_id} VIP{vip_level} activado por {days} días (+{reputation_bonus} rep)")
         else:
@@ -673,9 +705,9 @@ def confirm_payment(tx_hash: str):
             # Mapeo de reputación por plan
             bonus_map = {1: 500, 2: 2800, 3: 6000}
             reputation_bonus = bonus_map.get(payment.vip_level, 0)
-            
+
             activate_vip(payment.user_id, payment.vip_level, 30, reputation_bonus)
-            
+
             payment.status = 'confirmed'
             payment.confirmed_at = datetime.utcnow()
             session.commit()
@@ -771,5 +803,248 @@ def mark_notification_sent(notification_id: int):
         logger.info(f"✅ mark_notification_sent: Notificación {notification_id} marcada como enviada")
     except Exception as e:
         logger.error(f"❌ Error en mark_notification_sent({notification_id}): {e}")
+    finally:
+        session.close()
+
+# ===========================================
+# NUEVAS FUNCIONES PARA VIDEOS (LinkForge 1.1)
+# ===========================================
+
+def add_video(user_id: int, username: str, url: str, title: str):
+    """Agrega un nuevo video al sistema."""
+    session = SessionLocal()
+    try:
+        video = Video(
+            user_id=user_id,
+            username=username,
+            url=url,
+            title=title
+        )
+        session.add(video)
+        session.commit()
+        logger.info(f"✅ add_video: Video '{title}' agregado por usuario {user_id}")
+        return video
+    except Exception as e:
+        logger.error(f"❌ Error en add_video({user_id}): {e}")
+        session.rollback()
+        return None
+    finally:
+        session.close()
+
+def get_user_videos(user_id: int):
+    """Obtiene todos los videos de un usuario."""
+    session = SessionLocal()
+    try:
+        videos = session.query(Video).filter_by(user_id=user_id).order_by(Video.created_at.desc()).all()
+        logger.info(f"✅ get_user_videos: {len(videos)} videos encontrados para usuario {user_id}")
+        return videos
+    except Exception as e:
+        logger.error(f"❌ Error en get_user_videos({user_id}): {e}")
+        return []
+    finally:
+        session.close()
+
+def get_videos_count_by_user(user_id: int) -> int:
+    """Obtiene la cantidad de videos que tiene un usuario."""
+    session = SessionLocal()
+    try:
+        count = session.query(Video).filter_by(user_id=user_id).count()
+        logger.info(f"✅ get_videos_count_by_user: Usuario {user_id} tiene {count} videos")
+        return count
+    except Exception as e:
+        logger.error(f"❌ Error en get_videos_count_by_user({user_id}): {e}")
+        return 0
+    finally:
+        session.close()
+
+def get_top_videos(limit: int = 10):
+    """Obtiene los videos con más vistas."""
+    session = SessionLocal()
+    try:
+        videos = session.query(Video).order_by(Video.views.desc()).limit(limit).all()
+        logger.info(f"✅ get_top_videos: {len(videos)} videos obtenidos")
+        return videos
+    except Exception as e:
+        logger.error(f"❌ Error en get_top_videos({limit}): {e}")
+        return []
+    finally:
+        session.close()
+
+def get_all_videos():
+    """Obtiene todos los videos."""
+    session = SessionLocal()
+    try:
+        videos = session.query(Video).order_by(Video.created_at.desc()).all()
+        logger.info(f"✅ get_all_videos: {len(videos)} videos totales")
+        return videos
+    except Exception as e:
+        logger.error(f"❌ Error en get_all_videos(): {e}")
+        return []
+    finally:
+        session.close()
+
+def get_video(video_id: int):
+    """Obtiene un video por su ID."""
+    session = SessionLocal()
+    try:
+        video = session.query(Video).filter_by(id=video_id).first()
+        if video:
+            logger.info(f"✅ get_video: Video {video_id} encontrado")
+        else:
+            logger.warning(f"❌ get_video: Video {video_id} no encontrado")
+        return video
+    except Exception as e:
+        logger.error(f"❌ Error en get_video({video_id}): {e}")
+        return None
+    finally:
+        session.close()
+
+def increment_video_views(video_id: int):
+    """Incrementa el contador de vistas de un video."""
+    session = SessionLocal()
+    try:
+        video = session.query(Video).filter_by(id=video_id).first()
+        if video:
+            video.views += 1
+            session.commit()
+            logger.info(f"✅ increment_video_views: Video {video_id} ahora tiene {video.views} vistas")
+    except Exception as e:
+        logger.error(f"❌ Error en increment_video_views({video_id}): {e}")
+    finally:
+        session.close()
+
+def delete_video(video_id: int):
+    """Elimina un video."""
+    session = SessionLocal()
+    try:
+        video = session.query(Video).filter_by(id=video_id).first()
+        if video:
+            session.delete(video)
+            session.commit()
+            logger.info(f"✅ delete_video: Video {video_id} eliminado")
+        else:
+            logger.warning(f"❌ delete_video: Video {video_id} no encontrado")
+    except Exception as e:
+        logger.error(f"❌ Error en delete_video({video_id}): {e}")
+    finally:
+        session.close()
+
+def can_user_add_video(user_id: int) -> bool:
+    """Verifica si un usuario puede agregar más videos según su nivel VIP."""
+    session = SessionLocal()
+    try:
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if not user:
+            return False
+        
+        videos_count = session.query(Video).filter_by(user_id=user_id).count()
+        max_videos = 3 if user.vip_level >= 3 else 1
+        
+        can_add = videos_count < max_videos
+        logger.info(f"✅ can_user_add_video: Usuario {user_id} puede agregar video: {can_add} ({videos_count}/{max_videos})")
+        return can_add
+    except Exception as e:
+        logger.error(f"❌ Error en can_user_add_video({user_id}): {e}")
+        return False
+    finally:
+        session.close()
+
+# ===========================================
+# NUEVAS FUNCIONES PARA INSTAGRAM (LinkForge 1.1)
+# ===========================================
+
+def create_instagram_request(user_id: int, username: str, instagram_user: str):
+    """Crea una solicitud de verificación de Instagram."""
+    session = SessionLocal()
+    try:
+        request = InstagramVerification(
+            user_id=user_id,
+            username=username,
+            instagram_user=instagram_user,
+            status='pending'
+        )
+        session.add(request)
+        session.commit()
+        logger.info(f"✅ create_instagram_request: Solicitud creada para usuario {user_id} (@{instagram_user})")
+        return request
+    except Exception as e:
+        logger.error(f"❌ Error en create_instagram_request({user_id}): {e}")
+        session.rollback()
+        return None
+    finally:
+        session.close()
+
+def get_pending_instagram_requests():
+    """Obtiene todas las solicitudes de Instagram pendientes."""
+    session = SessionLocal()
+    try:
+        requests = session.query(InstagramVerification).filter_by(status='pending').order_by(InstagramVerification.created_at).all()
+        logger.info(f"✅ get_pending_instagram_requests: {len(requests)} solicitudes pendientes")
+        return requests
+    except Exception as e:
+        logger.error(f"❌ Error en get_pending_instagram_requests(): {e}")
+        return []
+    finally:
+        session.close()
+
+def approve_instagram_request(request_id: int):
+    """Aprueba una solicitud de Instagram y da +100 reputación."""
+    session = SessionLocal()
+    try:
+        request = session.query(InstagramVerification).filter_by(id=request_id).first()
+        if request:
+            request.status = 'approved'
+            request.approved_at = datetime.utcnow()
+            
+            # Dar +100 reputación al usuario
+            user = session.query(User).filter_by(telegram_id=request.user_id).first()
+            if user:
+                user.reputation += 100
+                logger.info(f"✅ +100 reputación para usuario {request.user_id} por Instagram")
+            
+            session.commit()
+            logger.info(f"✅ approve_instagram_request: Solicitud {request_id} aprobada")
+            return request
+        else:
+            logger.warning(f"❌ approve_instagram_request: Solicitud {request_id} no encontrada")
+            return None
+    except Exception as e:
+        logger.error(f"❌ Error en approve_instagram_request({request_id}): {e}")
+        session.rollback()
+        return None
+    finally:
+        session.close()
+
+def reject_instagram_request(request_id: int):
+    """Rechaza una solicitud de Instagram."""
+    session = SessionLocal()
+    try:
+        request = session.query(InstagramVerification).filter_by(id=request_id).first()
+        if request:
+            request.status = 'rejected'
+            session.commit()
+            logger.info(f"✅ reject_instagram_request: Solicitud {request_id} rechazada")
+            return request
+        else:
+            logger.warning(f"❌ reject_instagram_request: Solicitud {request_id} no encontrada")
+            return None
+    except Exception as e:
+        logger.error(f"❌ Error en reject_instagram_request({request_id}): {e}")
+        session.rollback()
+        return None
+    finally:
+        session.close()
+
+def has_user_claimed_instagram(user_id: int) -> bool:
+    """Verifica si un usuario ya reclamó la recompensa de Instagram."""
+    session = SessionLocal()
+    try:
+        request = session.query(InstagramVerification).filter_by(user_id=user_id).first()
+        has_claimed = request is not None
+        logger.info(f"✅ has_user_claimed_instagram: Usuario {user_id} ha reclamado: {has_claimed}")
+        return has_claimed
+    except Exception as e:
+        logger.error(f"❌ Error en has_user_claimed_instagram({user_id}): {e}")
+        return False
     finally:
         session.close()
