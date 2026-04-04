@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from database.database import (
+from database import (
     get_user, get_user_by_username, add_reputation,
     ban_user, unban_user, make_admin, is_admin, get_total_users, get_all_links
 )
