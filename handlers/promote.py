@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from database.database import (
+from database import (
     get_user, add_video, get_user_videos, delete_video, get_video,
     get_videos_count_by_user, can_user_add_video
 )
