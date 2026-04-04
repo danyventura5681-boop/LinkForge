@@ -1,7 +1,7 @@
 import logging
 import requests
 from datetime import datetime, timedelta
-from database.database import register_payment, confirm_payment, get_payment_by_hash, activate_vip, get_pending_payments
+from database import register_payment, confirm_payment, get_payment_by_hash, activate_vip, get_pending_payments
 from config import TRX_ADDRESS, TRX_PER_USD
 
 logger = logging.getLogger(__name__)
