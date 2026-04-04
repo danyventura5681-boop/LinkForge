@@ -1,6 +1,4 @@
 import logging
-import hashlib
-import uuid
 import asyncio
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,55 +11,55 @@ from database.database import (
 logger = logging.getLogger(__name__)
 
 # ============================================
-# SISTEMA DE TEMPORIZADOR
+# SISTEMA DE TEMPORIZADOR (OCULTO)
 # ============================================
 
 # Diccionario para almacenar temporizadores activos
-# {user_id: {"link_id": int, "target_user_id": int, "username": str, "timestamp": datetime, "message_id": int, "chat_id": int}}
 PENDING_VERIFICATIONS = {}
+
+# Diccionario para evitar doble recompensa
+# {user_id: [link_id1, link_id2, ...]}
+USER_VISITED_LINKS = {}
 
 # Constantes
 MIN_WAIT_SECONDS = 30      # 30 segundos mínimo de espera
 MAX_WAIT_SECONDS = 300     # 5 minutos máximo para verificar
-DAILY_LIMIT = 10           # Máximo 10 reputaciones por día
 
-def get_user_daily_verifications(user_id: int) -> int:
-    """Obtiene cuántas verificaciones ha hecho el usuario hoy."""
-    from database.database import SessionLocal, Click
-    session = SessionLocal()
-    try:
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-        count = session.query(Click).filter(
-            Click.user_id == user_id,
-            Click.created_at >= today
-        ).count()
-        return count
-    except Exception as e:
-        logger.error(f"Error getting daily verifications: {e}")
-        return 0
-    finally:
-        session.close()
+def has_user_visited_link(user_id: int, link_id: int) -> bool:
+    """Verifica si el usuario ya ha visitado este link antes."""
+    if user_id not in USER_VISITED_LINKS:
+        return False
+    return link_id in USER_VISITED_LINKS[user_id]
 
-async def send_timer_message(update: Update, context: ContextTypes.DEFAULT_TYPE, link_info: dict, wait_seconds: int):
-    """Envía mensaje con contador regresivo."""
+def mark_link_as_visited(user_id: int, link_id: int):
+    """Marca que el usuario ya visitó este link."""
+    if user_id not in USER_VISITED_LINKS:
+        USER_VISITED_LINKS[user_id] = []
+    if link_id not in USER_VISITED_LINKS[user_id]:
+        USER_VISITED_LINKS[user_id].append(link_id)
+    logger.info(f"📌 Link {link_id} marcado como visitado por usuario {user_id}")
+
+async def show_link_with_timer(update: Update, context: ContextTypes.DEFAULT_TYPE, link_info: dict):
+    """Muestra el link con botón de confirmación que aparece después de 30s."""
     user_id = update.effective_user.id
     username = link_info['username']
     link_url = link_info['url']
     link_id = link_info['link_id']
     target_user_id = link_info['user_id']
     
-    # Crear mensaje inicial
+    # Mensaje con el link como botón que redirige
     text = (
-        f"🔗 **Visita este link:**\n"
-        f"`{link_url}`\n\n"
-        f"👤 **Dueño:** @{username}\n"
-        f"⭐ **Reputación a ganar:** +5\n\n"
-        f"⏰ **Debes esperar {wait_seconds} segundos** para confirmar que viste el contenido.\n\n"
-        f"✅ El botón aparecerá automáticamente cuando termine la espera.\n\n"
-        f"⏱️ **Tiempo restante:** {wait_seconds} segundos..."
+        f"🔗 **Gana +5 reputación**\n\n"
+        f"👤 **Dueño del link:** @{username}\n"
+        f"⭐ **Recompensa:** +5 puntos\n\n"
+        f"👇 **Haz clic en el botón para visitar el contenido:**"
     )
     
-    keyboard = [[InlineKeyboardButton("◀️ Cancelar", callback_data="cancel_verification")]]
+    # Link como botón inline que redirige (NO callback_data, es url directa)
+    keyboard = [
+        [InlineKeyboardButton("🔗 VISITAR LINK", url=link_url)],
+        [InlineKeyboardButton("◀️ Cancelar", callback_data="cancel_verification")]
+    ]
     
     if update.callback_query:
         query = update.callback_query
@@ -77,117 +75,83 @@ async def send_timer_message(update: Update, context: ContextTypes.DEFAULT_TYPE,
             parse_mode='Markdown'
         )
     
-    # Guardar información del mensaje para poder editarlo después
-    return msg
-
-async def update_timer_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int, remaining: int, link_url: str, username: str):
-    """Actualiza el mensaje con el tiempo restante."""
-    text = (
-        f"🔗 **Visita este link:**\n"
-        f"`{link_url}`\n\n"
-        f"👤 **Dueño:** @{username}\n"
-        f"⭐ **Reputación a ganar:** +5\n\n"
-        f"⏰ **Debes esperar {remaining} segundos** para confirmar que viste el contenido.\n\n"
-        f"✅ El botón aparecerá automáticamente cuando termine la espera.\n\n"
-        f"⏱️ **Tiempo restante:** {remaining} segundos..."
-    )
-    
-    keyboard = [[InlineKeyboardButton("◀️ Cancelar", callback_data="cancel_verification")]]
-    
-    try:
-        await context.bot.edit_message_text(
-            text,
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        logger.error(f"Error updating timer: {e}")
-
-async def finish_verification(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    """Muestra el botón de confirmación después de la espera."""
-    if user_id not in PENDING_VERIFICATIONS:
-        return
-    
-    pending = PENDING_VERIFICATIONS[user_id]
-    link_url = pending['url']
-    username = pending['username']
-    chat_id = pending['chat_id']
-    message_id = pending['message_id']
-    
-    text = (
-        f"🔗 **Link visitado:**\n"
-        f"`{link_url}`\n\n"
-        f"👤 **Dueño:** @{username}\n"
-        f"⭐ **Reputación a ganar:** +5\n\n"
-        f"✅ **¿Ya viste el contenido?**\n"
-        f"Presiona el botón para recibir tu reputación.\n\n"
-        f"⚠️ Tienes {MAX_WAIT_SECONDS // 60} minutos para confirmar antes de que expire."
-    )
-    
-    keyboard = [[
-        InlineKeyboardButton("✅ Sí, ya lo vi", callback_data="confirm_verification"),
-        InlineKeyboardButton("◀️ Cancelar", callback_data="cancel_verification")
-    ]]
-    
-    try:
-        await context.bot.edit_message_text(
-            text,
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-    except Exception as e:
-        logger.error(f"Error showing confirmation button: {e}")
-
-async def start_timer(update: Update, context: ContextTypes.DEFAULT_TYPE, link_info: dict):
-    """Inicia el temporizador para un link."""
-    user_id = update.effective_user.id
-    
-    # Verificar límite diario
-    daily_count = get_user_daily_verifications(user_id)
-    if daily_count >= DAILY_LIMIT:
-        text = f"⚠️ **Límite diario alcanzado**\n\nHas usado {daily_count}/{DAILY_LIMIT} verificaciones hoy.\n\nVuelve mañana para ganar más reputación."
-        keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
-        
-        if update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-        else:
-            await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
-        return False
-    
-    # Enviar mensaje con temporizador
-    msg = await send_timer_message(update, context, link_info, MIN_WAIT_SECONDS)
-    
-    # Guardar en pending
+    # Guardar información para cuando pase el temporizador
     PENDING_VERIFICATIONS[user_id] = {
-        'link_id': link_info['link_id'],
-        'user_id': link_info['user_id'],
-        'target_user_id': link_info['user_id'],
-        'username': link_info['username'],
-        'url': link_info['url'],
+        'link_id': link_id,
+        'target_user_id': target_user_id,
+        'username': username,
+        'url': link_url,
         'chat_id': msg.chat_id,
         'message_id': msg.message_id,
         'timestamp': datetime.utcnow(),
         'confirmed': False
     }
     
-    # Ejecutar contador regresivo
-    for remaining in range(MIN_WAIT_SECONDS - 1, 0, -1):
-        await asyncio.sleep(1)
-        # Verificar si fue cancelado
-        if user_id not in PENDING_VERIFICATIONS:
-            return
-        if remaining % 5 == 0 or remaining <= 10:  # Actualizar cada 5 segundos o en los últimos 10
-            await update_timer_message(context, msg.chat_id, msg.message_id, remaining, link_info['url'], link_info['username'])
+    # Iniciar temporizador oculto de 30 segundos
+    asyncio.create_task(hidden_timer(context, user_id, msg.chat_id, msg.message_id, link_url, username, link_id, target_user_id))
     
-    # Verificar si sigue pendiente
-    if user_id in PENDING_VERIFICATIONS:
-        await finish_verification(update, context, user_id)
+    logger.info(f"⏰ Temporizador iniciado para usuario {user_id}, botón aparecerá en {MIN_WAIT_SECONDS}s")
+
+async def hidden_timer(context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id: int, message_id: int, link_url: str, username: str, link_id: int, target_user_id: int):
+    """Temporizador oculto que muestra el botón de confirmación después de 30s."""
+    await asyncio.sleep(MIN_WAIT_SECONDS)
     
-    return True
+    # Verificar si la verificación sigue activa
+    if user_id not in PENDING_VERIFICATIONS:
+        return
+    
+    pending = PENDING_VERIFICATIONS[user_id]
+    
+    # Verificar que el usuario no haya visitado este link antes
+    if has_user_visited_link(user_id, link_id):
+        # Si ya lo visitó, mostrar mensaje y eliminar pending
+        del PENDING_VERIFICATIONS[user_id]
+        text = (
+            f"⚠️ **Ya has visitado este link anteriormente**\n\n"
+            f"👤 **Dueño del link:** @{username}\n\n"
+            f"💡 No puedes recibir reputación dos veces por el mismo link.\n\n"
+            f"🔗 Prueba con otros links disponibles."
+        )
+        keyboard = [[InlineKeyboardButton("🎁 Ver más links", callback_data="earn_reputation")]]
+        try:
+            await context.bot.edit_message_text(
+                text,
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Error mostrando mensaje de link ya visitado: {e}")
+        return
+    
+    # Texto con el botón de confirmar
+    text = (
+        f"🔗 **Verificación de visita**\n\n"
+        f"👤 **Dueño del link:** @{username}\n"
+        f"⭐ **Recompensa:** +5 puntos\n\n"
+        f"✅ **¿Ya visitaste el link?**\n"
+        f"Presiona el botón para recibir tu reputación.\n\n"
+        f"⚠️ Tienes 5 minutos para confirmar."
+    )
+    
+    # Botón Confirmar con callback_data
+    keyboard = [
+        [InlineKeyboardButton("✅ CONFIRMAR", callback_data=f"confirm_link_{link_id}_{target_user_id}")],
+        [InlineKeyboardButton("◀️ Cancelar", callback_data="cancel_verification")]
+    ]
+    
+    try:
+        await context.bot.edit_message_text(
+            text,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        logger.info(f"✅ Botón CONFIRMAR apareció para usuario {user_id}")
+    except Exception as e:
+        logger.error(f"Error mostrando botón de confirmación: {e}")
 
 # ============================================
 # FUNCIONES PRINCIPALES
@@ -197,10 +161,6 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra los top 5 links para ganar reputación."""
     user_id = update.effective_user.id
     logger.info(f"🎁 earn_reputation: Usuario {user_id} solicitó ganar reputación")
-    
-    # Verificar límite diario
-    daily_count = get_user_daily_verifications(user_id)
-    daily_text = f"📊 **Usados hoy:** {daily_count}/{DAILY_LIMIT}\n\n" if daily_count > 0 else ""
 
     top_users = get_top_users(limit=10)
     available_users = top_users[:5]
@@ -208,7 +168,6 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not available_users:
         text = (
             f"🎁 **No hay usuarios disponibles**\n\n"
-            f"{daily_text}"
             f"Vuelve más tarde cuando haya más usuarios registrados.\n\n"
             f"💡 Consejo: Invita amigos con el botón 'Invitar Amigos' para aumentar la comunidad."
         )
@@ -230,9 +189,8 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     context.user_data['link_map'] = {}
-    bot_username = (await context.bot.get_me()).username
 
-    text = f"🎁 **Gana +5 reputación por cada link** 🎁\n\n{daily_text}"
+    text = f"🎁 **Gana +5 reputación por cada link** 🎁\n\n"
 
     keyboard = []
     link_counter = 1
@@ -250,6 +208,10 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             link = user_links[0]
             link_url = link.url
             link_id = link.id
+            
+            # Verificar si el usuario ya visitó este link
+            if has_user_visited_link(user_id, link_id):
+                continue  # Saltar links ya visitados
 
             callback_id = f"link_{link_counter}"
             context.user_data['link_map'][callback_id] = {
@@ -271,9 +233,8 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not keyboard:
         text = (
             f"🎁 **No hay links disponibles**\n\n"
-            f"{daily_text}"
-            f"Todos los usuarios disponibles son tú mismo o no tienen links activos.\n\n"
-            f"💡 Vuelve más tarde o invita nuevos usuarios."
+            f"Ya has visitado todos los links disponibles.\n\n"
+            f"💡 Vuelve más tarde cuando haya nuevos usuarios o links activos."
         )
         keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
 
@@ -293,10 +254,10 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-    logger.info(f"🎁 Mostrados {len(keyboard)} usuarios disponibles")
+    logger.info(f"🎁 Mostrados {link_counter - 1} usuarios disponibles")
 
 async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Inicia el proceso de visita con temporizador."""
+    """Inicia el proceso de visita con temporizador oculto."""
     query = update.callback_query
     await query.answer()
 
@@ -324,25 +285,38 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Verificar límite diario
-    daily_count = get_user_daily_verifications(user_id)
-    if daily_count >= DAILY_LIMIT:
+    # Verificar si ya visitó este link antes
+    if has_user_visited_link(user_id, link_info['link_id']):
         await query.edit_message_text(
-            f"⚠️ **Límite diario alcanzado**\n\nHas usado {daily_count}/{DAILY_LIMIT} verificaciones hoy.\n\nVuelve mañana para ganar más reputación.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]]),
+            "⚠️ **Ya has visitado este link anteriormente**\n\n"
+            "No puedes recibir reputación dos veces por el mismo link.\n\n"
+            "🔗 Prueba con otros links disponibles.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🎁 Ver más links", callback_data="earn_reputation")]]),
             parse_mode='Markdown'
         )
         return
     
-    # Iniciar temporizador
-    await start_timer(update, context, link_info)
+    # Mostrar link con temporizador oculto
+    await show_link_with_timer(update, context, link_info)
 
-async def confirm_verification(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Confirma la visita y otorga reputación."""
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
+    
+    # Extraer datos del callback_data
+    data_parts = query.data.split('_')
+    if len(data_parts) >= 3:
+        link_id = int(data_parts[2])
+        target_user_id = int(data_parts[3])
+    else:
+        await query.edit_message_text(
+            "❌ Error en la verificación.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
+        )
+        return
     
     # Verificar que haya una verificación pendiente
     if user_id not in PENDING_VERIFICATIONS:
@@ -354,9 +328,17 @@ async def confirm_verification(update: Update, context: ContextTypes.DEFAULT_TYP
     
     pending = PENDING_VERIFICATIONS[user_id]
     
+    # Verificar que coincidan los datos
+    if pending['link_id'] != link_id or pending['target_user_id'] != target_user_id:
+        await query.edit_message_text(
+            "❌ Error en la verificación. Intenta de nuevo.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
+        )
+        return
+    
     # Verificar expiración (5 minutos máximo después del temporizador)
     age = (datetime.utcnow() - pending['timestamp']).total_seconds()
-    if age > MAX_WAIT_SECONDS:
+    if age > MAX_WAIT_SECONDS + MIN_WAIT_SECONDS:
         del PENDING_VERIFICATIONS[user_id]
         await query.edit_message_text(
             "⏰ **Tiempo expirado**\n\nDebes confirmar dentro de los 5 minutos después de ver el contenido.",
@@ -373,19 +355,22 @@ async def confirm_verification(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return
     
-    # Verificar límite diario nuevamente
-    daily_count = get_user_daily_verifications(user_id)
-    if daily_count >= DAILY_LIMIT:
+    # Verificar si ya visitó este link antes (doble chequeo)
+    if has_user_visited_link(user_id, link_id):
         del PENDING_VERIFICATIONS[user_id]
         await query.edit_message_text(
-            f"⚠️ **Límite diario alcanzado**\n\nHas usado {daily_count}/{DAILY_LIMIT} verificaciones hoy.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]]),
+            "⚠️ **Ya has recibido reputación por este link**\n\n"
+            "No puedes recibir reputación dos veces por el mismo link.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🎁 Ver más links", callback_data="earn_reputation")]]),
             parse_mode='Markdown'
         )
         return
     
     # Registrar el clic y otorgar reputación
     record_click(user_id, pending['link_id'], reputation_earned=5)
+    
+    # Marcar este link como visitado por este usuario
+    mark_link_as_visited(user_id, link_id)
     
     logger.info(f"✅ +5 reputación para usuario {user_id} por visitar link de {pending['target_user_id']}")
     
@@ -395,7 +380,6 @@ async def confirm_verification(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.edit_message_text(
         f"✅ **¡+5 reputación ganados!**\n\n"
         f"📊 Has visitado el link de **@{pending['username']}**\n\n"
-        f"🎁 Usados hoy: {daily_count + 1}/{DAILY_LIMIT}\n\n"
         f"💡 Sigue visitando más links para ganar puntos.",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🎁 Ver más links", callback_data="earn_reputation")],
