@@ -146,13 +146,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"**Opciones disponibles:**"
     )
 
-    # Teclado del menú principal
+    # Teclado del menú principal ACTUALIZADO con nuevos botones
     keyboard = [
         [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
-        [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
+        [InlineKeyboardButton("🎬 Top Videos", callback_data="top_videos")],
         [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
+        [InlineKeyboardButton("🎁 Recompensa Diaria", callback_data="daily_reward")],
         [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
+        [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
         [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
+        [InlineKeyboardButton("📱 Promocionar Contenido", callback_data="promote_menu")],
     ]
 
     # Botón de admin solo para el admin principal
@@ -204,6 +207,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("🔵 Mostrando panel admin...")
         from handlers.admin import admin_panel
         await admin_panel(update, context)
+
+    elif data == "daily_reward":
+        logger.info("🎁 Mostrando recompensa diaria...")
+        from handlers.daily_reward import daily_reward
+        await daily_reward(update, context)
+
+    elif data == "top_videos":
+        logger.info("📹 Mostrando top videos...")
+        from handlers.video import top_videos
+        await top_videos(update, context)
+
+    elif data == "promote_menu":
+        logger.info("📱 Mostrando promocionar contenido...")
+        from handlers.promote import promote_menu
+        await promote_menu(update, context)
 
     else:
         logger.info(f"🟡 Botón no reconocido: {data}")
@@ -262,10 +280,13 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
-        [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
+        [InlineKeyboardButton("🎬 Top Videos", callback_data="top_videos")],
         [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
+        [InlineKeyboardButton("🎁 Recompensa Diaria", callback_data="daily_reward")],
         [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
+        [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
         [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
+        [InlineKeyboardButton("📱 Promocionar Contenido", callback_data="promote_menu")],
     ]
 
     if user_id == 5057900537:
