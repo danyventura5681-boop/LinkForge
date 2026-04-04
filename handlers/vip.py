@@ -472,7 +472,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     logger.info(f"🔧 confirm_payment_command: Admin confirmando pago {payment_ref}")
 
     # Buscar en la base de datos por código de pago
-    from database.database import get_payment_by_hash
+    from database import get_payment_by_hash
     payment = get_payment_by_hash(payment_ref)
 
     # Si no se encuentra, intentar formato antiguo (VIP{level}_{user_id}_{timestamp})
@@ -517,7 +517,7 @@ async def confirm_payment_command(update: Update, context: ContextTypes.DEFAULT_
     if payment and payment.status == "pending":
         plan = VIP_PLANS.get(payment.vip_level)
         if plan:
-            from database.database import confirm_payment
+            from database import confirm_payment
             confirm_payment(payment_ref)
             activate_vip(payment.user_id, payment.vip_level, plan['days'], plan['reputation'])
 
