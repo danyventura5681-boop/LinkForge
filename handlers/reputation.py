@@ -433,6 +433,19 @@ async def cancel_verification(update: Update, context: ContextTypes.DEFAULT_TYPE
     if user_id in PENDING_VERIFICATIONS:
         del PENDING_VERIFICATIONS[user_id]
         logger.info(f"❌ Usuario {user_id} canceló la verificación")
+
+    await query.edit_message_text(
+        "❌ Verificación cancelada.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
+    )
+
+async def more_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra más links disponibles."""
+    query = update.callback_query
+    logger.info("🔄 more_links: Mostrando más links")
+    await query.answer()
+    await visit_links(update, context)
+
 # ============================================
 # TAREA INSTAGRAM
 # ============================================
@@ -443,47 +456,50 @@ async def instagram_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra la tarea de seguir Instagram (+100 reputación)."""
     user_id = update.effective_user.id
     logger.info(f"📸 instagram_task: Usuario {user_id} solicitó tarea Instagram")
-    
+
     from database import has_user_claimed_instagram
-    
+
     # Verificar si ya reclamó
     if has_user_claimed_instagram(user_id):
         text = (
-            "📸 **Tarea de Instagram**\n\n"
-            "⚠️ **Ya has completado esta tarea anteriormente**\n\n"
+            "📸 Tarea de Instagram\n\n"
+            "⚠️ Ya has completado esta tarea anteriormente\n\n"
             "✨ Recompensa: +100 reputación\n"
             "📊 Estado: ✅ Completada\n\n"
             "💡 No puedes reclamar la misma tarea dos veces."
         )
         keyboard = [[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]]
-        
+
         if update.callback_query:
             query = update.callback_query
             try:
                 await query.edit_message_text(
                     text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
+                    parse_mode=None
                 )
             except Exception as e:
                 logger.error(f"Error editando mensaje: {e}")
-                await query.message.reply_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='Markdown'
-                )
+                try:
+                    await query.message.reply_text(
+                        text,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode=None
+                    )
+                except Exception as e2:
+                    logger.error(f"Error enviando mensaje: {e2}")
         else:
             await update.message.reply_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
+                parse_mode=None
             )
         return
 
     text = (
-        "📸 **Síguenos en Instagram y gana +100 reputación**\n\n"
+        "📸 Siguenos en Instagram y gana +100 reputacion\n\n"
         "🔗 Cuenta: @dany_vg56\n\n"
-        "📋 **Instrucciones:**\n"
+        "📋 Instrucciones:\n"
         "1️⃣ Sigue nuestra cuenta en Instagram\n"
         "2️⃣ Haz clic en '✅ Confirmar'\n"
         "3️⃣ Ingresa tu usuario de Instagram\n"
@@ -503,52 +519,58 @@ async def instagram_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
+                parse_mode=None
             )
         except Exception as e:
             logger.error(f"Error editando mensaje: {e}")
-            await query.message.reply_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
+            try:
+                await query.message.reply_text(
+                    text,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=None
+                )
+            except Exception as e2:
+                logger.error(f"Error enviando mensaje: {e2}")
     else:
         await update.message.reply_text(
             text,
             reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
+            parse_mode=None
         )
-
 
 async def instagram_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Alias para instagram_task."""
     await instagram_task(update, context)
 
-
 async def confirm_instagram_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de confirmación de Instagram."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = query.from_user.id
     logger.info(f"📸 confirm_instagram_start: Usuario {user_id} iniciando confirmación")
 
+    text = "📸 Ingresa tu usuario de Instagram:\n\n💡 Sin el @ (ejemplo: dany_vg56)"
+    keyboard = [[InlineKeyboardButton("◀️ Cancelar", callback_data="earn_reputation")]]
+
     try:
         await query.edit_message_text(
-            "📸 **Ingresa tu usuario de Instagram:**\n\n"
-            "💡 Sin el @ (ejemplo: dany_vg56)",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="earn_reputation")]])
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode=None
         )
     except Exception as e:
         logger.error(f"Error editando mensaje en confirm_instagram_start: {e}")
-        await query.message.reply_text(
-            "📸 **Ingresa tu usuario de Instagram:**\n\n"
-            "💡 Sin el @ (ejemplo: dany_vg56)",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="earn_reputation")]])
-        )
-    
-    return WAITING_INSTAGRAM_USERNAME
+        try:
+            await query.message.reply_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=None
+            )
+        except Exception as e2:
+            logger.error(f"Error enviando mensaje: {e2}")
 
+    return WAITING_INSTAGRAM_USERNAME
 
 async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Procesa el username de Instagram y notifica al admin."""
@@ -573,7 +595,7 @@ async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAUL
     try:
         await context.bot.send_message(
             chat_id=ADMIN_ID,
-            text=f"📸 **Nueva solicitud Instagram**\n\n"
+            text=f"📸 Nueva solicitud Instagram\n\n"
                  f"👤 Usuario: @{username} (ID: {user_id})\n"
                  f"📸 Instagram: @{instagram_user}\n\n"
                  f"✅ Verifica y confirma el seguimiento.",
@@ -587,22 +609,11 @@ async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAUL
         logger.error(f"❌ Error notificando admin: {e}")
 
     await update.message.reply_text(
-        "✅ **Solicitud enviada al administrador**\n\n"
+        "✅ Solicitud enviada al administrador\n\n"
         "⏱️ Confirmaremos tu seguimiento en 24 horas y recibirás +100 reputación.\n\n"
         "💡 Asegúrate de haber seguido la cuenta @dany_vg56",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
     )
 
     return ConversationHandler.END
-    await query.edit_message_text(
-        "❌ Verificación cancelada.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
-    )
-
-async def more_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra más links disponibles."""
-    query = update.callback_query
-    logger.info("🔄 more_links: Mostrando más links")
-    await query.answer()
-    await visit_links(update, context)
 
