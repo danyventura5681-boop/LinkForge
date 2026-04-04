@@ -31,7 +31,8 @@ from handlers.admin import (
     admin_panel, add_reputation_start, add_reputation_get_user, 
     add_reputation_amount, reduce_reputation_start, reduce_reputation_get_user,
     reduce_reputation_amount, cancel_admin, make_admin_action, make_admin_process,
-    ban_user_action, ban_user_process, unban_user_action, unban_user_process, list_users
+    ban_user_action, ban_user_process, unban_user_action, unban_user_process, list_users,
+    confirm_instagram_admin, reject_instagram_admin, list_pending_instagram
 )
 from handlers.vip import (
     vip_menu, buy_vip, check_payment, check_payment_retry, confirm_payment_command,
@@ -382,6 +383,11 @@ telegram_app.add_handler(CallbackQueryHandler(daily_reward, pattern="^daily_rewa
 # ✅ NUEVO CALLBACK PARA TAREA INSTAGRAM
 telegram_app.add_handler(CallbackQueryHandler(instagram_reward, pattern="^instagram_reward$"))
 telegram_app.add_handler(CallbackQueryHandler(confirm_instagram_start, pattern="^confirm_instagram$"))
+
+# ✅ NUEVOS CALLBACKS PARA ADMINISTRACIÓN DE INSTAGRAM
+telegram_app.add_handler(CallbackQueryHandler(confirm_instagram_admin, pattern="^confirm_insta_"))
+telegram_app.add_handler(CallbackQueryHandler(reject_instagram_admin, pattern="^reject_insta_"))
+telegram_app.add_handler(CallbackQueryHandler(list_pending_instagram, pattern="^admin_instagram$"))
 
 # ===========================================
 # 4. CUARTO: MESSAGE HANDLER (mínima prioridad - AL FINAL)
