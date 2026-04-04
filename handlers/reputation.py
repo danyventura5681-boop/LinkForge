@@ -552,7 +552,7 @@ async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAUL
         return WAITING_INSTAGRAM_USERNAME
 
     # Guardar solicitud en la base de datos
-    from database.database import create_instagram_request
+    from database import create_instagram_request
     create_instagram_request(user_id, username, instagram_user)
 
     ADMIN_ID = 5057900537
