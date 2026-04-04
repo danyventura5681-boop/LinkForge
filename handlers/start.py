@@ -37,26 +37,57 @@ def format_time_remaining(expires_at):
         return "No disponible"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Mensaje de bienvenida y panel principal"""
+    """
+    Mensaje de bienvenida y panel principal.
+    🔥 Manejo de referidos (ÚNICO PUNTO DE ENTRADA)
+    """
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
 
     existing_user = get_user(telegram_id)
 
+    # 🔥 FIX REFERIDOS (ÚNICO PUNTO DE ENTRADA)
     if not existing_user:
-        create_user(telegram_id, username)
-        logger.info(f"✅ Nuevo usuario: {username}")
+        referrer_id = None
+
+        # Verificar si viene de un link de referido (ej: t.me/LinkForgeBot?start=ref_123456789)
+        if context.args and context.args[0].startswith("ref_"):
+            try:
+                referrer_id = int(context.args[0][4:])
+                logger.info(f"🔍 Referido detectado: {referrer_id} para nuevo usuario {telegram_id}")
+                
+                # Verificar que no se refiera a sí mismo
+                if referrer_id == telegram_id:
+                    logger.warning(f"⚠️ Auto-referido detectado para {telegram_id}, ignorando")
+                    referrer_id = None
+                    
+            except (ValueError, IndexError) as e:
+                logger.error(f"❌ Error procesando referido: {e}")
+                referrer_id = None
+
+        # Crear usuario con el referido (la lógica de reputación está dentro de create_user)
+        user_created = create_user(telegram_id, username, referred_by=referrer_id)
+        
+        if user_created:
+            logger.info(f"✅ Nuevo usuario creado: {telegram_id} (@{username}) con referido {referrer_id}")
+        else:
+            logger.error(f"❌ Error creando usuario: {telegram_id}")
+        
+        # Datos para el nuevo usuario
         reputation = 0
         rank = "Nuevo"
         links = []
         vip_level = 0
     else:
+        # Usuario existente
         reputation = existing_user.reputation if existing_user.reputation else 0
         rank = get_user_rank(telegram_id) or "?"
         links = get_user_links(telegram_id)
         vip_level = existing_user.vip_level if existing_user.vip_level else 0
+        logger.info(f"✅ Usuario existente: {telegram_id} (@{username})")
 
+    # Mostrar información del link principal
     main_link = links[0] if links else None
     if main_link and main_link.expires_at:
         time_remaining = format_time_remaining(main_link.expires_at)
@@ -64,6 +95,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         link_display = "🔗 **Link:** No registrado"
 
+    # Mensaje de bienvenida
     text = (
         f"🎉 **¡Bienvenido a LinkForge, {username}!**\n\n"
         f"🆔 **Tu ID:** `{telegram_id}`\n"
@@ -78,6 +110,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"**Opciones disponibles:**"
     )
 
+    # Teclado del menú principal
     keyboard = [
         [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
         [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
@@ -86,6 +119,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
     ]
 
+    # Botón de admin solo para el admin principal
     if telegram_id == 5057900537:
         keyboard.append([InlineKeyboardButton("🛡️ Admin", callback_data="admin_panel")])
 
