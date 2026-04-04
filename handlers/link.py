@@ -3,7 +3,7 @@ import re
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_user, register_link, get_user_links, update_link
+from database import get_user, register_link, get_user_links, update_link
 
 logger = logging.getLogger(__name__)
 
