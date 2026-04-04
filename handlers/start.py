@@ -36,11 +36,47 @@ def format_time_remaining(expires_at):
         logger.error(f"Error formateando tiempo: {e}")
         return "No disponible"
 
+async def process_visit_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Marca que el usuario realmente abrió el link.
+    Esto se ejecuta cuando alguien hace clic en un link de verificación.
+    """
+    user = update.effective_user
+    args = context.args
+    
+    if not args or not args[0].startswith("visit_"):
+        return
+    
+    token = args[0][6:]  # Remover "visit_" del inicio
+    
+    # Importar LINK_VISITS aquí para evitar import circular
+    from handlers.reputation import LINK_VISITS
+    
+    if token in LINK_VISITS:
+        LINK_VISITS[token]["visited"] = True
+        logger.info(f"✅ Usuario {user.id} abrió el link correctamente (token={token})")
+        
+        # Opcional: Enviar mensaje de confirmación silenciosa
+        try:
+            await update.message.reply_text(
+                "✅ **Verificación exitosa!**\n\n"
+                "Ya puedes cerrar esta ventana y volver al bot.",
+                parse_mode='Markdown'
+            )
+        except:
+            pass
+    else:
+        logger.warning(f"❌ Token no encontrado en start: {token}")
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Mensaje de bienvenida y panel principal.
     🔥 Manejo de referidos (ÚNICO PUNTO DE ENTRADA)
+    🔥 Manejo de verificación de visitas
     """
+    # 🔥 PRIMERO: Procesar token de visita si existe
+    await process_visit_token(update, context)
+    
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
@@ -56,24 +92,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 referrer_id = int(context.args[0][4:])
                 logger.info(f"🔍 Referido detectado: {referrer_id} para nuevo usuario {telegram_id}")
-                
+
                 # Verificar que no se refiera a sí mismo
                 if referrer_id == telegram_id:
                     logger.warning(f"⚠️ Auto-referido detectado para {telegram_id}, ignorando")
                     referrer_id = None
-                    
+
             except (ValueError, IndexError) as e:
                 logger.error(f"❌ Error procesando referido: {e}")
                 referrer_id = None
 
         # Crear usuario con el referido (la lógica de reputación está dentro de create_user)
         user_created = create_user(telegram_id, username, referred_by=referrer_id)
-        
+
         if user_created:
             logger.info(f"✅ Nuevo usuario creado: {telegram_id} (@{username}) con referido {referrer_id}")
         else:
             logger.error(f"❌ Error creando usuario: {telegram_id}")
-        
+
         # Datos para el nuevo usuario
         reputation = 0
         rank = "Nuevo"
