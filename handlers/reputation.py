@@ -452,14 +452,14 @@ async def more_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 WAITING_INSTAGRAM_USERNAME = 1
 
-async def instagram_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Tarea de seguir Instagram (+100 reputación)."""
+async def instagram_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra la tarea de seguir Instagram (+100 reputación)."""
     user_id = update.effective_user.id
-    user = get_user(user_id)
-    
-    logger.info(f"📸 instagram_reward: Usuario {user_id} solicitó tarea Instagram")
+    logger.info(f"📸 instagram_task: Usuario {user_id} solicitó tarea Instagram")
     
     # Verificar si ya reclamó
+    from database.database import has_user_claimed_instagram
+    
     if has_user_claimed_instagram(user_id):
         text = (
             "📸 **Tarea de Instagram**\n\n"
@@ -484,7 +484,7 @@ async def instagram_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown'
             )
         return
-    
+
     text = (
         "📸 **Síguenos en Instagram y gana +100 reputación**\n\n"
         "🔗 Cuenta: @dany_vg56\n\n"
@@ -515,6 +515,10 @@ async def instagram_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
+
+async def instagram_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Alias para instagram_task (mantiene compatibilidad)."""
+    await instagram_task(update, context)
 
 async def confirm_instagram_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de confirmación de Instagram."""
