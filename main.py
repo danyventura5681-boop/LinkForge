@@ -66,7 +66,7 @@ WAITING_REDUCE_REPUTATION = 3
 async def check_expiring_links():
     """Revisa links que expiran pronto y envía notificaciones"""
     try:
-        from database.database import get_expiring_links, get_user
+        from database import get_expiring_links, get_user
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
         checkpoints = [48, 24, 15, 10, 5, 2, 1]
