@@ -2,7 +2,7 @@ import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_user, create_user, get_user_rank, get_user_links
+from database import get_user, create_user, get_user_rank, get_user_links
 
 logger = logging.getLogger(__name__)
 
