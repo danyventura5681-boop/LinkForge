@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
-from database.database import get_user, activate_vip, register_payment, get_user_links, is_admin
+from database import get_user, activate_vip, register_payment, get_user_links, is_admin
 from config import VIP_PLANS, TRX_ADDRESS, TRX_PER_USD
 
 logger = logging.getLogger(__name__)
