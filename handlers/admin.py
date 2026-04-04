@@ -549,7 +549,7 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     logger.info(f"📋 list_users: Admin {user_id} solicitó lista de usuarios")
 
-    from database.database import get_all_users
+    from database import get_all_users
     users = get_all_users()
 
     if not users:
