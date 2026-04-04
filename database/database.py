@@ -858,12 +858,22 @@ def get_videos_count_by_user(user_id: int) -> int:
         session.close()
 
 def get_top_videos(limit: int = 10):
-    """Obtiene los videos con más vistas."""
+    """Obtiene los videos ordenados por reputación del usuario dueño."""
     session = SessionLocal()
     try:
-        videos = session.query(Video).order_by(Video.views.desc()).limit(limit).all()
-        logger.info(f"✅ get_top_videos: {len(videos)} videos obtenidos")
-        return videos
+        videos = session.query(Video).all()
+        # Ordenar por reputación del usuario dueño
+        videos_with_reputation = []
+        for video in videos:
+            user = session.query(User).filter_by(telegram_id=video.user_id).first()
+            rep = user.reputation if user else 0
+            videos_with_reputation.append((video, rep))
+        
+        videos_with_reputation.sort(key=lambda x: x[1], reverse=True)
+        result = [v[0] for v in videos_with_reputation[:limit]]
+        
+        logger.info(f"✅ get_top_videos: {len(result)} videos obtenidos ordenados por reputación")
+        return result
     except Exception as e:
         logger.error(f"❌ Error en get_top_videos({limit}): {e}")
         return []
