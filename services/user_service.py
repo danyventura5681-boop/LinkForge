@@ -1,5 +1,5 @@
 import logging
-from database.database import get_user, create_user, add_reputation, get_user_links, get_user_rank
+from database import get_user, create_user, add_reputation, get_user_links, get_user_rank
 from database.database import get_referral_count  # Si existe, o crear función
 
 logger = logging.getLogger(__name__)
