@@ -16,6 +16,9 @@ URL_PATTERN = re.compile(
     r'(?::\d+)?'
     r'(?:/?|[/?]\S+)$', re.IGNORECASE)
 
+# Constante para ConversationHandler
+WAITING_NEW_LINK = 1
+
 def is_valid_url(url: str) -> bool:
     return re.match(URL_PATTERN, url) is not None
 
@@ -166,7 +169,7 @@ async def manage_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Menú para gestionar links del usuario."""
     user_id = update.effective_user.id
     user = get_user(user_id)
-    
+
     logger.info(f"📌 manage_links: Usuario {user_id} accedió a gestionar links")
 
     links = get_user_links(user_id)
@@ -187,17 +190,17 @@ async def manage_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, link in enumerate(links, 1):
             expires_in = format_expiration_date(link.expires_at)
             text += f"{i}. `{link.url}`\n⏱️ {expires_in} | 👁️ {link.clicks_received} clicks\n\n"
-        
+
         keyboard = []
         for i, link in enumerate(links, 1):
             keyboard.append([InlineKeyboardButton(
                 f"✏️ Cambiar Link {i}",
                 callback_data=f"change_link_{link.id}"
             )])
-        
+
         if vip_level > 0 and len(links) < 3:
             keyboard.append([InlineKeyboardButton("➕ Agregar Link", callback_data="add_link")])
-        
+
         keyboard.append([InlineKeyboardButton("◀️ Volver", callback_data="volver_menu")])
 
     if update.callback_query:
@@ -215,15 +218,15 @@ async def manage_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def change_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Inicia el proceso de cambiar un link."""
+    """Inicia el proceso de cambiar un link para ConversationHandler."""
     query = update.callback_query
     await query.answer()
-    
+
     link_id = int(query.data.split('_')[2])
     context.user_data['changing_link_id'] = link_id
-    
+
     logger.info(f"✏️ change_link_start: Cambiando link {link_id}")
-    
+
     await query.edit_message_text(
         "✏️ **Envía el nuevo link:**\n\n"
         "El tiempo de expiración NO se modificará.\n"
@@ -231,46 +234,49 @@ async def change_link_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="manage_links")]])
     )
     
-    context.user_data['waiting_for_link_change'] = True
+    return WAITING_NEW_LINK
 
-async def process_link_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Procesa el cambio de link."""
-    if not context.user_data.get('waiting_for_link_change'):
-        return
-    
+async def process_change_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Procesa el cambio de link para ConversationHandler."""
     user_id = update.effective_user.id
     new_url = update.message.text.strip()
     link_id = context.user_data.get('changing_link_id')
-    
-    logger.info(f"✏️ Cambiando link {link_id} a: {new_url}")
-    
+
+    logger.info(f"✏️ process_change_link: Cambiando link {link_id} a: {new_url}")
+
     # Borrar mensaje
     try:
         await update.message.delete()
     except:
         pass
-    
+
     # Validar URL
     if not is_valid_url(new_url):
         await update.message.reply_text(
             "❌ **URL no válida.**\n\n"
-            "Intenta de nuevo con una URL válida.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="manage_links")]])
+            "Intenta de nuevo con una URL válida.\n"
+            "Ejemplo: `https://tusitio.com`",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Cancelar", callback_data="manage_links")]]),
+            parse_mode='Markdown'
         )
-        return
-    
+        return WAITING_NEW_LINK
+
     # Actualizar link
     update_link(link_id, new_url)
     logger.info(f"✅ Link {link_id} actualizado")
-    
+
     await update.message.reply_text(
         f"✅ **¡Link actualizado!**\n\n"
         f"🔗 Nuevo URL: `{new_url}`\n\n"
         f"⏳ La fecha de expiración se mantiene igual.",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📌 Ver mis links", callback_data="manage_links")]])
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📌 Ver mis links", callback_data="manage_links")]]),
+        parse_mode='Markdown'
     )
+
+    # Limpiar datos
+    context.user_data.pop('changing_link_id', None)
     
-    context.user_data['waiting_for_link_change'] = False
+    return ConversationHandler.END
 
 # ===========================================
 # COMPATIBILIDAD
@@ -298,6 +304,7 @@ async def cancel_register_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     context.user_data.pop('waiting_for_link', None)
     context.user_data.pop('waiting_for_link_change', None)
+    context.user_data.pop('changing_link_id', None)
     await query.edit_message_text(
         "❌ Operación cancelada.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
