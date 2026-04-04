@@ -25,7 +25,7 @@ from handlers.link import (
     confirm_add_link, cancel_register_callback
 )
 from handlers.ranking import ranking, ranking_button_handler
-from handlers.reputation import earn_reputation, visit_link, more_links
+from handlers.reputation import earn_reputation, visit_link, more_links, confirm_link_callback, cancel_verification
 from handlers.referral import referral, process_referral
 from handlers.admin import (
     admin_panel, add_reputation_start, add_reputation_get_user, 
@@ -330,6 +330,10 @@ telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_u
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
 telegram_app.add_handler(CallbackQueryHandler(instagram_task, pattern="^instagram_task$"))
 telegram_app.add_handler(CallbackQueryHandler(change_link_start, pattern="^change_link$"))
+
+# ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VERIFICACIÓN DE VISITAS
+telegram_app.add_handler(CallbackQueryHandler(confirm_link_callback, pattern="^confirm_link_"))
+telegram_app.add_handler(CallbackQueryHandler(cancel_verification, pattern="^cancel_verification$"))
 
 # ===========================================
 # 4. CUARTO: MESSAGE HANDLER (mínima prioridad - AL FINAL)
