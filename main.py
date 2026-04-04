@@ -299,16 +299,21 @@ manual_payment_conv = ConversationHandler(
 )
 telegram_app.add_handler(manual_payment_conv)
 
-# ✅ HANDLER PARA TAREA DE INSTAGRAM (CORREGIDO)
+# ✅ HANDLER PARA TAREA DE INSTAGRAM (CONVERSATION CORREGIDO)
 instagram_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(instagram_task, pattern="^instagram_task$")],
+    entry_points=[CallbackQueryHandler(instagram_reward, pattern="^instagram_reward$")],
     states={
-        WAITING_INSTAGRAM_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_instagram_process)],
+        WAITING_INSTAGRAM_USERNAME: [
+            CallbackQueryHandler(confirm_instagram_start, pattern="^confirm_instagram$"),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_instagram_process)
+        ],
     },
     fallbacks=[
         CallbackQueryHandler(earn_reputation, pattern="^earn_reputation$"),
+        CallbackQueryHandler(earn_reputation, pattern="^volver_menu$"),
         CommandHandler("cancel", earn_reputation),
     ],
+    allow_reentry=True,
 )
 telegram_app.add_handler(instagram_conv)
 
@@ -357,8 +362,6 @@ telegram_app.add_handler(CallbackQueryHandler(manual_payment_start, pattern="^ma
 telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
 telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_users$"))
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel|daily_reward|top_videos|promote_menu)$"))
-telegram_app.add_handler(CallbackQueryHandler(instagram_task, pattern="^instagram_task$"))
-telegram_app.add_handler(CallbackQueryHandler(change_link_start, pattern="^change_link$"))
 
 # ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VERIFICACIÓN DE VISITAS
 telegram_app.add_handler(CallbackQueryHandler(confirm_link_callback, pattern="^confirm_link_"))
@@ -379,10 +382,6 @@ telegram_app.add_handler(CallbackQueryHandler(promote_menu, pattern="^promote_me
 telegram_app.add_handler(CallbackQueryHandler(my_uploaded_videos, pattern="^my_uploaded_videos$"))
 telegram_app.add_handler(CallbackQueryHandler(delete_video_callback, pattern="^delete_video_"))
 telegram_app.add_handler(CallbackQueryHandler(daily_reward, pattern="^daily_reward$"))
-
-# ✅ NUEVO CALLBACK PARA TAREA INSTAGRAM
-telegram_app.add_handler(CallbackQueryHandler(instagram_reward, pattern="^instagram_reward$"))
-telegram_app.add_handler(CallbackQueryHandler(confirm_instagram_start, pattern="^confirm_instagram$"))
 
 # ✅ NUEVOS CALLBACKS PARA ADMINISTRACIÓN DE INSTAGRAM
 telegram_app.add_handler(CallbackQueryHandler(confirm_instagram_admin, pattern="^confirm_insta_"))
