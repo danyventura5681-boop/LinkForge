@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database.database import (
-    get_user, add_reputation, get_all_videos, get_user_videos,
-    add_video, get_video, increment_video_views, get_top_videos
+    get_user, add_reputation, get_top_videos, get_video,
+    increment_video_views, has_user_watched_video, mark_video_as_watched
 )
 
 logger = logging.getLogger(__name__)
@@ -17,28 +17,10 @@ logger = logging.getLogger(__name__)
 # Diccionario para almacenar temporizadores activos de videos
 PENDING_VIDEO_VERIFICATIONS = {}
 
-# Diccionario para evitar doble recompensa por video
-# {user_id: [video_id1, video_id2, ...]}
-USER_WATCHED_VIDEOS = {}
-
 # Constantes
 VIDEO_WAIT_SECONDS = 120      # 2 minutos = 120 segundos
 VIDEO_MAX_WAIT_SECONDS = 600  # 10 minutos máximo para verificar
-VIDEO_REWARD = 30             # +30 reputación por video
-
-def has_user_watched_video(user_id: int, video_id: int) -> bool:
-    """Verifica si el usuario ya ha visto este video antes."""
-    if user_id not in USER_WATCHED_VIDEOS:
-        return False
-    return video_id in USER_WATCHED_VIDEOS[user_id]
-
-def mark_video_as_watched(user_id: int, video_id: int):
-    """Marca que el usuario ya vio este video."""
-    if user_id not in USER_WATCHED_VIDEOS:
-        USER_WATCHED_VIDEOS[user_id] = []
-    if video_id not in USER_WATCHED_VIDEOS[user_id]:
-        USER_WATCHED_VIDEOS[user_id].append(video_id)
-    logger.info(f"📹 Video {video_id} marcado como visto por usuario {user_id}")
+VIDEO_REWARD = 30             # +30 reputación por video (para quien VE)
 
 async def show_video_with_timer(update: Update, context: ContextTypes.DEFAULT_TYPE, video_info: dict):
     """Muestra el video con botón de confirmación que aparece después de 2 minutos."""
@@ -163,10 +145,11 @@ async def video_hidden_timer(context: ContextTypes.DEFAULT_TYPE, user_id: int, c
 # ============================================
 
 async def top_videos(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra el top de videos para ganar reputación."""
+    """Muestra el top de videos ordenados por reputación del dueño."""
     user_id = update.effective_user.id
     logger.info(f"📹 top_videos: Usuario {user_id} solicitó ver top videos")
     
+    # Obtener videos ordenados por reputación del dueño
     videos = get_top_videos(limit=10)
     
     if not videos:
@@ -178,7 +161,7 @@ async def top_videos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         keyboard = [
             [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
-            [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
+            [InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]
         ]
         
         if update.callback_query:
@@ -212,6 +195,10 @@ async def top_videos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if has_user_watched_video(user_id, video.id):
             continue
         
+        # Obtener reputación del dueño del video
+        video_owner = get_user(video.user_id)
+        owner_reputation = video_owner.reputation if video_owner else 0
+        
         username = video.username or f"Usuario_{video.user_id}"
         
         callback_id = f"video_{video_counter}"
@@ -224,9 +211,10 @@ async def top_videos(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'views': video.views or 0
         }
         
+        # Mostrar con reputación del dueño (no con vistas)
         keyboard.append([
             InlineKeyboardButton(
-                f"📹 {video.title[:30]} (@{username}) - {video.views} vistas",
+                f"📹 {video.title[:30]} (@{username}) - ⭐{owner_reputation} pts",
                 callback_data=callback_id
             )
         ])
@@ -239,10 +227,10 @@ async def top_videos(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💡 Ya has visto todos los videos disponibles.\n"
             f"📹 Vuelve más tarde para más contenido."
         )
-        keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
+        keyboard = [[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]]
     
     keyboard.append([InlineKeyboardButton("🔄 Actualizar", callback_data="refresh_videos")])
-    keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")])
+    keyboard.append([InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")])
     
     if update.callback_query:
         query = update.callback_query
@@ -304,7 +292,7 @@ async def watch_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await show_video_with_timer(update, context, video_info)
 
 async def confirm_video_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Confirma la vista del video y otorga reputación."""
+    """Confirma la vista del video y otorga +30 reputación al que VIÓ el video."""
     query = update.callback_query
     await query.answer()
     
@@ -370,13 +358,13 @@ async def confirm_video_callback(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
     
-    # Otorgar reputación
+    # ✅ OTORGAR +30 REPUTACIÓN AL USUARIO QUE VIÓ EL VIDEO
     add_reputation(user_id, VIDEO_REWARD)
     
-    # Incrementar contador de vistas del video
+    # ✅ INCREMENTAR CONTADOR DE VISTAS DEL VIDEO
     increment_video_views(video_id)
     
-    # Marcar este video como visto por este usuario
+    # ✅ MARCAR ESTE VIDEO COMO VISTO POR ESTE USUARIO
     mark_video_as_watched(user_id, video_id)
     
     logger.info(f"✅ +{VIDEO_REWARD} reputación para usuario {user_id} por ver video de {pending['creator_user_id']}")
