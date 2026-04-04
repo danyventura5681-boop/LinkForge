@@ -1,5 +1,5 @@
 import logging
-from database.database import get_user, create_user, get_referrals_count
+from database import get_user, create_user, get_referrals_count
 
 logger = logging.getLogger(__name__)
 
