@@ -1,7 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_top_users, get_user_rank, get_user
+from database import get_top_users, get_user_rank, get_user
 
 logger = logging.getLogger(__name__)
 
