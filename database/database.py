@@ -453,6 +453,23 @@ def get_expiring_links(hours: int):
     finally:
         session.close()
 
+def update_link(link_id: int, new_url: str):
+    """Actualiza solo la URL de un link, sin cambiar expiración."""
+    session = SessionLocal()
+    try:
+        link = session.query(Link).filter_by(id=link_id).first()
+        if link:
+            old_url = link.url
+            link.url = new_url
+            session.commit()
+            logger.info(f"✅ Link {link_id} actualizado: {old_url} → {new_url}")
+        else:
+            logger.warning(f"❌ Link {link_id} no encontrado")
+    except Exception as e:
+        logger.error(f"❌ Error actualizando link: {e}")
+    finally:
+        session.close()
+
 # ===========================================
 # FUNCIONES DE REPUTACIÓN Y RANKING
 # ===========================================
@@ -509,6 +526,40 @@ def record_click(user_id: int, link_id: int, reputation_earned: int = 5):
         logger.info(f"✅ record_click: Usuario {user_id} ganó +{reputation_earned} rep del link {link_id}")
     except Exception as e:
         logger.error(f"❌ Error en record_click({user_id}, {link_id}): {e}")
+    finally:
+        session.close()
+
+def get_referrals_count(telegram_id: int) -> int:
+    """Obtiene la cantidad de referidos de un usuario."""
+    session = SessionLocal()
+    try:
+        count = session.query(Referral).filter_by(referrer_id=telegram_id).count()
+        logger.info(f"✅ get_referrals_count: Usuario {telegram_id} tiene {count} referidos")
+        return count
+    except Exception as e:
+        logger.error(f"❌ Error en get_referrals_count: {e}")
+        return 0
+    finally:
+        session.close()
+
+def reset_expired_links_reputation(telegram_id: int):
+    """Reinicia la reputación si todos los links expiraron."""
+    session = SessionLocal()
+    try:
+        active_links = session.query(Link).filter(
+            Link.user_id == telegram_id,
+            Link.expires_at > datetime.utcnow()
+        ).count()
+        
+        if active_links == 0:
+            user = session.query(User).filter_by(telegram_id=telegram_id).first()
+            if user:
+                old_rep = user.reputation
+                user.reputation = 0
+                session.commit()
+                logger.info(f"✅ Reputación reiniciada: {telegram_id} ({old_rep} → 0)")
+    except Exception as e:
+        logger.error(f"❌ Error reiniciando reputación: {e}")
     finally:
         session.close()
 
