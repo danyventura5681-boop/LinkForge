@@ -38,6 +38,8 @@ from handlers.vip import (
     manual_payment_start, manual_payment_get_amount, manual_payment_get_address, manual_payment_get_tx,
     WAITING_PAYMENT_AMOUNT, WAITING_PAYMENT_ADDRESS, WAITING_PAYMENT_TX
 )
+from handlers.reputation import instagram_task, WAITING_INSTAGRAM_USERNAME
+from handlers.link import change_link_start, process_change_link, WAITING_NEW_LINK
 
 # Estados para conversación (admin)
 WAITING_USER_ID = 1
@@ -131,12 +133,12 @@ async def verify_payments_endpoint():
     """
     try:
         logger.info("🔍 Iniciando verificación de pagos pendientes...")
-        
+
         from services.blockchain import scan_pending_payments
         results = scan_pending_payments()
-        
+
         logger.info(f"✅ Verificación completada: {results}")
-        
+
         return {
             "status": "ok",
             "message": "Pagos verificados",
@@ -159,16 +161,16 @@ async def check_all():
     """
     try:
         logger.info("🔄 Ejecutando verificaciones completas...")
-        
+
         # 1. Verificar links que expiran
         await check_expiring_links()
         logger.info("✅ Verificación de links completada")
-        
+
         # 2. Verificar pagos pendientes
         from services.blockchain import scan_pending_payments
         payment_results = scan_pending_payments()
         logger.info(f"✅ Verificación de pagos completada: {payment_results}")
-        
+
         return {
             "status": "ok",
             "message": "Todas las verificaciones completadas",
@@ -282,6 +284,32 @@ manual_payment_conv = ConversationHandler(
 )
 telegram_app.add_handler(manual_payment_conv)
 
+# ✅ HANDLER PARA TAREA DE INSTAGRAM
+instagram_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(instagram_task, pattern="^instagram_task$")],
+    states={
+        WAITING_INSTAGRAM_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, instagram_task)],
+    },
+    fallbacks=[
+        CallbackQueryHandler(back_to_start, pattern="^volver_menu$"),
+        CommandHandler("cancel", back_to_start),
+    ],
+)
+telegram_app.add_handler(instagram_conv)
+
+# ✅ HANDLER PARA CAMBIAR LINK
+change_link_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(change_link_start, pattern="^change_link$")],
+    states={
+        WAITING_NEW_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_change_link)],
+    },
+    fallbacks=[
+        CallbackQueryHandler(back_to_start, pattern="^volver_menu$"),
+        CommandHandler("cancel", back_to_start),
+    ],
+)
+telegram_app.add_handler(change_link_conv)
+
 # ===========================================
 # 3. TERCERO: CALLBACK QUERY HANDLERS
 # ===========================================
@@ -300,6 +328,8 @@ telegram_app.add_handler(CallbackQueryHandler(manual_payment_start, pattern="^ma
 telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
 telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_users$"))
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+telegram_app.add_handler(CallbackQueryHandler(instagram_task, pattern="^instagram_task$"))
+telegram_app.add_handler(CallbackQueryHandler(change_link_start, pattern="^change_link$"))
 
 # ===========================================
 # 4. CUARTO: MESSAGE HANDLER (mínima prioridad - AL FINAL)
