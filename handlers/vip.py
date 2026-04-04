@@ -417,7 +417,7 @@ async def check_payment_retry(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     # Verificar en base de datos si el pago ya fue confirmado
-    from database.database import get_payment_by_hash
+    from database import get_payment_by_hash
     payment = get_payment_by_hash(payment_hash)
 
     if payment and payment.status == "confirmed":
