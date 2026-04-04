@@ -1,6 +1,7 @@
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
+from datetime import datetime
 from database import (
     get_user, get_user_by_username, add_reputation,
     ban_user, unban_user, make_admin, is_admin, get_total_users, get_all_links
@@ -590,5 +591,180 @@ async def cancel_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "❌ Operación cancelada.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Admin", callback_data="admin_panel")]]),
             parse_mode='Markdown'
+
+# ===========================================
+# ADMINISTRACIÓN DE SOLICITUDES INSTAGRAM
+# ===========================================
+
+async def confirm_instagram_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin confirma solicitud de Instagram y da +100 reputación."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Extraer datos del callback: confirm_insta_{user_id}_{instagram_user}
+    data_parts = query.data.split('_')
+    if len(data_parts) >= 3:
+        user_id = int(data_parts[2])
+        instagram_user = '_'.join(data_parts[3:]) if len(data_parts) > 3 else ""
+    else:
+        await query.edit_message_text("❌ Error al procesar la solicitud.")
+        return
+    
+    from database import approve_instagram_request, get_user
+    
+    # Buscar la solicitud pendiente
+    from database import get_pending_instagram_requests, SessionLocal, InstagramVerification
+    
+    session = SessionLocal()
+    try:
+        solicitud = session.query(InstagramVerification).filter_by(
+            user_id=user_id,
+            status='pending'
+        ).first()
+        
+        if not solicitud:
+            await query.edit_message_text("❌ No se encontró una solicitud pendiente para este usuario.")
+            return
+        
+        # Aprobar la solicitud
+        solicitud.status = 'approved'
+        solicitud.approved_at = datetime.utcnow()
+        
+        # Dar +100 reputación al usuario
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        if user:
+            user.reputation += 100
+            logger.info(f"✅ +100 reputación para usuario {user_id} por Instagram")
+        
+        session.commit()
+        
+        # Notificar al usuario
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎉 **¡Felicidades!** 🎉\n\n"
+                     "✅ Tu solicitud de Instagram ha sido **CONFIRMADA**.\n\n"
+                     "✨ Has recibido **+100 reputación** por seguir nuestra cuenta.\n\n"
+                     "📊 Continúa usando LinkForge para ganar más puntos.\n\n"
+                     "🎁 ¡Gracias por apoyarnos!",
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"❌ Error notificando al usuario {user_id}: {e}")
+        
+        await query.edit_message_text(
+            f"✅ **Solicitud confirmada**\n\n"
+            f"👤 Usuario: @{solicitud.username} (ID: {user_id})\n"
+            f"📸 Instagram: @{instagram_user}\n\n"
+            f"✨ +100 reputación otorgada.\n\n"
+            f"📊 El usuario ha sido notificado."
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error confirmando solicitud: {e}")
+        await query.edit_message_text(f"❌ Error: {e}")
+    finally:
+        session.close()
+
+
+async def reject_instagram_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin rechaza solicitud de Instagram."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Extraer datos del callback: reject_insta_{user_id}
+    data_parts = query.data.split('_')
+    if len(data_parts) >= 3:
+        user_id = int(data_parts[2])
+    else:
+        await query.edit_message_text("❌ Error al procesar la solicitud.")
+        return
+    
+    from database import SessionLocal, InstagramVerification
+    
+    session = SessionLocal()
+    try:
+        solicitud = session.query(InstagramVerification).filter_by(
+            user_id=user_id,
+            status='pending'
+        ).first()
+        
+        if not solicitud:
+            await query.edit_message_text("❌ No se encontró una solicitud pendiente para este usuario.")
+            return
+        
+        # Rechazar la solicitud
+        solicitud.status = 'rejected'
+        session.commit()
+        
+        # Notificar al usuario
+        try:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ **Solicitud de Instagram rechazada**\n\n"
+                     "No pudimos verificar que sigues nuestra cuenta de Instagram.\n\n"
+                     "📸 Asegúrate de seguir @dany_vg56 y vuelve a intentarlo.\n\n"
+                     "💡 Si crees que es un error, contacta al administrador.",
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"❌ Error notificando al usuario {user_id}: {e}")
+        
+        await query.edit_message_text(
+            f"❌ **Solicitud rechazada**\n\n"
+            f"👤 Usuario: @{solicitud.username} (ID: {user_id})\n"
+            f"📸 Instagram: @{solicitud.instagram_user}\n\n"
+            f"El usuario ha sido notificado."
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error rechazando solicitud: {e}")
+        await query.edit_message_text(f"❌ Error: {e}")
+    finally:
+        session.close()
+
+
+async def list_pending_instagram(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra las solicitudes de Instagram pendientes."""
+    query = update.callback_query
+    await query.answer()
+    
+    from database import get_pending_instagram_requests
+    
+    pending = get_pending_instagram_requests()
+    
+    if not pending:
+        text = "📸 **Solicitudes Instagram**\n\nNo hay solicitudes pendientes."
+        keyboard = [[InlineKeyboardButton("◀️ Volver", callback_data="admin_panel")]]
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        return
+    
+    text = f"📸 **Solicitudes Instagram pendientes**\n\nTotal: {len(pending)}\n\n"
+    
+    keyboard = []
+    for req in pending:
+        text += f"👤 @{req.username} (ID: {req.user_id})\n📸 @{req.instagram_user}\n📅 {req.created_at.strftime('%d/%m/%Y %H:%M')}\n\n"
+        keyboard.append([
+            InlineKeyboardButton(
+                f"✅ Confirmar @{req.username}",
+                callback_data=f"confirm_insta_{req.user_id}_{req.instagram_user}"
+            ),
+            InlineKeyboardButton(
+                f"❌ Rechazar",
+                callback_data=f"reject_insta_{req.user_id}"
+            )
+        ])
+    
+    keyboard.append([InlineKeyboardButton("◀️ Volver", callback_data="admin_panel")])
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='Markdown'
+    )
         )
     return ConversationHandler.END
