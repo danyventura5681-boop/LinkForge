@@ -25,7 +25,7 @@ from handlers.link import (
     confirm_add_link, cancel_register_callback
 )
 from handlers.ranking import ranking, ranking_button_handler
-from handlers.reputation import earn_reputation, visit_link, more_links, confirm_link_callback, cancel_verification
+from handlers.reputation import earn_reputation, visit_link, more_links, confirm_link_callback, cancel_verification, visit_links
 from handlers.referral import referral, process_referral
 from handlers.admin import (
     admin_panel, add_reputation_start, add_reputation_get_user, 
@@ -38,7 +38,7 @@ from handlers.vip import (
     manual_payment_start, manual_payment_get_amount, manual_payment_get_address, manual_payment_get_tx,
     WAITING_PAYMENT_AMOUNT, WAITING_PAYMENT_ADDRESS, WAITING_PAYMENT_TX
 )
-from handlers.reputation import instagram_task, WAITING_INSTAGRAM_USERNAME
+from handlers.reputation import instagram_task, WAITING_INSTAGRAM_USERNAME, instagram_reward
 from handlers.link import change_link_start, process_change_link, WAITING_NEW_LINK
 
 # ===========================================
@@ -363,6 +363,9 @@ telegram_app.add_handler(CallbackQueryHandler(change_link_start, pattern="^chang
 telegram_app.add_handler(CallbackQueryHandler(confirm_link_callback, pattern="^confirm_link_"))
 telegram_app.add_handler(CallbackQueryHandler(cancel_verification, pattern="^cancel_verification$"))
 
+# ✅ NUEVOS CALLBACKS PARA VISITAR LINKS
+telegram_app.add_handler(CallbackQueryHandler(visit_links, pattern="^visit_links$"))
+
 # ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VIDEOS
 telegram_app.add_handler(CallbackQueryHandler(top_videos, pattern="^top_videos$"))
 telegram_app.add_handler(CallbackQueryHandler(watch_video, pattern="^video_"))
@@ -375,6 +378,9 @@ telegram_app.add_handler(CallbackQueryHandler(promote_menu, pattern="^promote_me
 telegram_app.add_handler(CallbackQueryHandler(my_uploaded_videos, pattern="^my_uploaded_videos$"))
 telegram_app.add_handler(CallbackQueryHandler(delete_video_callback, pattern="^delete_video_"))
 telegram_app.add_handler(CallbackQueryHandler(daily_reward, pattern="^daily_reward$"))
+
+# ✅ NUEVO CALLBACK PARA TAREA INSTAGRAM
+telegram_app.add_handler(CallbackQueryHandler(instagram_reward, pattern="^instagram_reward$"))
 
 # ===========================================
 # 4. CUARTO: MESSAGE HANDLER (mínima prioridad - AL FINAL)
