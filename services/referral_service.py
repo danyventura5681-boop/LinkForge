@@ -1,4 +1,4 @@
-import logging
+8import logging
 from database import get_user, create_user, get_referrals_count
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def get_referrals_list(telegram_id: int, limit: int = 10):
     Returns:
         list: Lista de diccionarios con información de los referidos
     """
-    from database.database import SessionLocal, Referral, User
+    from database import SessionLocal, Referral, User
     
     session = SessionLocal()
     try:
