@@ -30,7 +30,7 @@ def get_user_referrals_count(telegram_id: int) -> int:
     """
     Obtiene la cantidad de usuarios referidos por este usuario.
     """
-    from database.database import SessionLocal, Referral
+    from database import SessionLocal, Referral
     
     session = SessionLocal()
     count = session.query(Referral).filter_by(referrer_id=telegram_id).count()
