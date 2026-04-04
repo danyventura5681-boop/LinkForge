@@ -38,7 +38,7 @@ from handlers.vip import (
     manual_payment_start, manual_payment_get_amount, manual_payment_get_address, manual_payment_get_tx,
     WAITING_PAYMENT_AMOUNT, WAITING_PAYMENT_ADDRESS, WAITING_PAYMENT_TX
 )
-from handlers.reputation import instagram_task, WAITING_INSTAGRAM_USERNAME, instagram_reward
+from handlers.reputation import instagram_task, WAITING_INSTAGRAM_USERNAME, instagram_reward, confirm_instagram_process, confirm_instagram_start
 from handlers.link import change_link_start, process_change_link, WAITING_NEW_LINK
 
 # ===========================================
@@ -298,15 +298,15 @@ manual_payment_conv = ConversationHandler(
 )
 telegram_app.add_handler(manual_payment_conv)
 
-# ✅ HANDLER PARA TAREA DE INSTAGRAM
+# ✅ HANDLER PARA TAREA DE INSTAGRAM (CORREGIDO)
 instagram_conv = ConversationHandler(
     entry_points=[CallbackQueryHandler(instagram_task, pattern="^instagram_task$")],
     states={
-        WAITING_INSTAGRAM_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, instagram_task)],
+        WAITING_INSTAGRAM_USERNAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_instagram_process)],
     },
     fallbacks=[
-        CallbackQueryHandler(back_to_start, pattern="^volver_menu$"),
-        CommandHandler("cancel", back_to_start),
+        CallbackQueryHandler(earn_reputation, pattern="^earn_reputation$"),
+        CommandHandler("cancel", earn_reputation),
     ],
 )
 telegram_app.add_handler(instagram_conv)
@@ -381,6 +381,7 @@ telegram_app.add_handler(CallbackQueryHandler(daily_reward, pattern="^daily_rewa
 
 # ✅ NUEVO CALLBACK PARA TAREA INSTAGRAM
 telegram_app.add_handler(CallbackQueryHandler(instagram_reward, pattern="^instagram_reward$"))
+telegram_app.add_handler(CallbackQueryHandler(confirm_instagram_start, pattern="^confirm_instagram$"))
 
 # ===========================================
 # 4. CUARTO: MESSAGE HANDLER (mínima prioridad - AL FINAL)
