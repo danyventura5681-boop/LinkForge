@@ -458,7 +458,7 @@ async def instagram_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"📸 instagram_task: Usuario {user_id} solicitó tarea Instagram")
     
     # Verificar si ya reclamó
-    from database.database import has_user_claimed_instagram
+    from database import has_user_claimed_instagram
     
     if has_user_claimed_instagram(user_id):
         text = (
