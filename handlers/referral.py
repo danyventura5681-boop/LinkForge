@@ -1,7 +1,10 @@
 import logging
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database.database import get_user, add_reputation, create_user
+from database.database import (
+    get_user, add_reputation, create_user, SessionLocal, User
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,6 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
     ]
 
-    # Si viene de un callback (botón), usar query.edit_message_text
     if update.callback_query:
         query = update.callback_query
         await query.edit_message_text(
@@ -39,7 +41,6 @@ async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
     else:
-        # Si viene de un comando /referral
         await update.message.reply_text(
             text,
             reply_markup=InlineKeyboardMarkup(keyboard),
@@ -52,7 +53,6 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     logger.info(f"🔗 process_referral: Args recibidos: {args}")
 
-    # ✅ Validar que exista el argumento de referido
     if not args or not args[0].startswith('ref_'):
         logger.info("⚠️ No hay referido en los args")
         return
@@ -65,10 +65,10 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name or "Usuario"
-    
+
     logger.info(f"🔗 process_referral: Usuario {user_id} (@{username}) vino por enlace de referente {referrer_id}")
 
-    # ✅ NO permitir auto-referidos
+    # NO permitir auto-referidos
     if user_id == referrer_id:
         logger.warning(f"⚠️ Usuario {user_id} intentó referirse a sí mismo")
         try:
@@ -81,33 +81,33 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"❌ Error enviando mensaje de auto-referido: {e}")
         return
 
-    # ✅ Verificar que el usuario no sea duplicado en la BD
+    # ✅ VERIFICAR SI EL USUARIO YA EXISTE
     existing_user = get_user(user_id)
+    
     if existing_user:
-        logger.info(f"⚠️ Usuario {user_id} ya existe en BD, verificando si tiene referente...")
+        logger.info(f"⚠️ Usuario {user_id} ya existe en BD")
         
-        # ✅ Si ya existe pero NO tiene referente, asignarle ahora
+        # Si ya existe pero NO tiene referente, asignarle ahora
         if existing_user.referred_by is None:
             logger.info(f"🔗 Asignando referente {referrer_id} al usuario existente {user_id}")
-            # Necesitamos actualizar la BD
-            from database.database import SessionLocal
+            
             session = SessionLocal()
             try:
-                user_obj = session.query(get_user.__self__).filter_by(telegram_id=user_id).first()
+                user_obj = session.query(User).filter_by(telegram_id=user_id).first()
                 if user_obj:
                     user_obj.referred_by = referrer_id
                     session.commit()
                     logger.info(f"✅ Referente asignado a usuario existente {user_id}")
-                    
+
                     # Dar reputación al referente
                     add_reputation(referrer_id, 50)
                     logger.info(f"✅ +50 reputación dado a referente {referrer_id}")
-                    
-                    # Notificar
+
+                    # Notificar al referente
                     try:
                         await context.bot.send_message(
                             chat_id=referrer_id,
-                            text=f"🎉 **¡Un usuario existente confirmó tu referencia!**\n\n"
+                            text=f"🎉 **¡Un usuario confirmó tu referencia!**\n\n"
                                  f"👤 Usuario: @{username}\n"
                                  f"🎁 +50 reputación añadida a tu cuenta.\n\n"
                                  f"📊 Usa el botón 'Invitar Amigos' para ver tu enlace personal.",
@@ -122,15 +122,15 @@ async def process_referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
             finally:
                 session.close()
         else:
-            logger.info(f"⚠️ Usuario {user_id} ya tiene referente {existing_user.referred_by}, no se da recompensa")
+            logger.info(f"⚠️ Usuario {user_id} ya tiene referente {existing_user.referred_by}")
         return
 
-    # ✅ Usuario NUEVO: crear con referido
+    # ✅ USUARIO NUEVO: CREAR CON REFERIDO
     logger.info(f"👤 Usuario {user_id} es nuevo, creando con referido {referrer_id}")
     create_user(user_id, username, referred_by=referrer_id)
-    logger.info(f"✅ Usuario {user_id} creado con referido {referrer_id}, +50 rep para referente")
+    logger.info(f"✅ Usuario {user_id} creado exitosamente con referido {referrer_id}")
 
-    # ✅ Notificar al referente
+    # ✅ NOTIFICAR AL REFERENTE
     try:
         await context.bot.send_message(
             chat_id=referrer_id,
