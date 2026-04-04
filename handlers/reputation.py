@@ -5,7 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 from database.database import (
     get_top_users, get_user, add_reputation, get_user_links, record_click,
-    get_referrals_count
+    get_referrals_count, has_user_claimed_instagram
 )
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ async def show_link_with_timer(update: Update, context: ContextTypes.DEFAULT_TYP
     link_url = link_info['url']
     link_id = link_info['link_id']
     target_user_id = link_info['user_id']
-    
+
     # Mensaje con el link como botón que redirige
     text = (
         f"🔗 **Gana +5 reputación**\n\n"
@@ -54,13 +54,13 @@ async def show_link_with_timer(update: Update, context: ContextTypes.DEFAULT_TYP
         f"⭐ **Recompensa:** +5 puntos\n\n"
         f"👇 **Haz clic en el botón para visitar el contenido:**"
     )
-    
+
     # Link como botón inline que redirige (NO callback_data, es url directa)
     keyboard = [
         [InlineKeyboardButton("🔗 VISITAR LINK", url=link_url)],
         [InlineKeyboardButton("◀️ Cancelar", callback_data="cancel_verification")]
     ]
-    
+
     if update.callback_query:
         query = update.callback_query
         msg = await query.edit_message_text(
@@ -74,7 +74,7 @@ async def show_link_with_timer(update: Update, context: ContextTypes.DEFAULT_TYP
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-    
+
     # Guardar información para cuando pase el temporizador
     PENDING_VERIFICATIONS[user_id] = {
         'link_id': link_id,
@@ -86,22 +86,22 @@ async def show_link_with_timer(update: Update, context: ContextTypes.DEFAULT_TYP
         'timestamp': datetime.utcnow(),
         'confirmed': False
     }
-    
+
     # Iniciar temporizador oculto de 30 segundos
     asyncio.create_task(hidden_timer(context, user_id, msg.chat_id, msg.message_id, link_url, username, link_id, target_user_id))
-    
+
     logger.info(f"⏰ Temporizador iniciado para usuario {user_id}, botón aparecerá en {MIN_WAIT_SECONDS}s")
 
 async def hidden_timer(context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id: int, message_id: int, link_url: str, username: str, link_id: int, target_user_id: int):
     """Temporizador oculto que muestra el botón de confirmación después de 30s."""
     await asyncio.sleep(MIN_WAIT_SECONDS)
-    
+
     # Verificar si la verificación sigue activa
     if user_id not in PENDING_VERIFICATIONS:
         return
-    
+
     pending = PENDING_VERIFICATIONS[user_id]
-    
+
     # Verificar que el usuario no haya visitado este link antes
     if has_user_visited_link(user_id, link_id):
         # Si ya lo visitó, mostrar mensaje y eliminar pending
@@ -124,7 +124,7 @@ async def hidden_timer(context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id
         except Exception as e:
             logger.error(f"Error mostrando mensaje de link ya visitado: {e}")
         return
-    
+
     # Texto con el botón de confirmar
     text = (
         f"🔗 **Verificación de visita**\n\n"
@@ -134,13 +134,13 @@ async def hidden_timer(context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id
         f"Presiona el botón para recibir tu reputación.\n\n"
         f"⚠️ Tienes 5 minutos para confirmar."
     )
-    
+
     # Botón Confirmar con callback_data
     keyboard = [
         [InlineKeyboardButton("✅ CONFIRMAR", callback_data=f"confirm_link_{link_id}_{target_user_id}")],
         [InlineKeyboardButton("◀️ Cancelar", callback_data="cancel_verification")]
     ]
-    
+
     try:
         await context.bot.edit_message_text(
             text,
@@ -158,20 +158,55 @@ async def hidden_timer(context: ContextTypes.DEFAULT_TYPE, user_id: int, chat_id
 # ============================================
 
 async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra los top 5 links para ganar reputación."""
+    """Muestra las opciones para ganar reputación."""
     user_id = update.effective_user.id
     logger.info(f"🎁 earn_reputation: Usuario {user_id} solicitó ganar reputación")
+
+    text = (
+        f"🎁 **Gana reputación** 🎁\n\n"
+        f"📋 **Elige una opción:**\n\n"
+        f"🔗 **Visitar Links** - +5 reputación por link\n"
+        f"📹 **Ver Videos** - +30 reputación por video (2 min)\n"
+        f"📸 **Tarea Instagram** - +100 reputación (única vez)\n\n"
+        f"💡 Cada opción tiene su propia recompensa."
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("🔗 Visitar Links", callback_data="visit_links")],
+        [InlineKeyboardButton("📹 Ver Top Videos", callback_data="top_videos")],
+        [InlineKeyboardButton("📸 Tarea Instagram", callback_data="instagram_reward")],
+        [InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]
+    ]
+
+    if update.callback_query:
+        query = update.callback_query
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+
+async def visit_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra los links disponibles para visitar."""
+    user_id = update.effective_user.id
+    logger.info(f"🔗 visit_links: Usuario {user_id} solicitó visitar links")
 
     top_users = get_top_users(limit=10)
     available_users = top_users[:5]
 
     if not available_users:
         text = (
-            f"🎁 **No hay usuarios disponibles**\n\n"
+            f"🔗 **No hay links disponibles**\n\n"
             f"Vuelve más tarde cuando haya más usuarios registrados.\n\n"
             f"💡 Consejo: Invita amigos con el botón 'Invitar Amigos' para aumentar la comunidad."
         )
-        keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
+        keyboard = [[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]]
 
         if update.callback_query:
             query = update.callback_query
@@ -190,28 +225,28 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data['link_map'] = {}
 
-    text = f"🎁 **Gana +5 reputación por cada link** 🎁\n\n"
+    text = f"🔗 **Gana +5 reputación por cada link** 🎁\n\n"
 
     keyboard = []
     link_counter = 1
 
     for i, user in enumerate(available_users, 1):
         username = user.username or f"Usuario_{user.telegram_id}"
-        
+
         # No mostrar el propio usuario
         if user.telegram_id == user_id:
             continue
-            
+
         user_links = get_user_links(user.telegram_id)
 
         if user_links:
             link = user_links[0]
             link_url = link.url
             link_id = link.id
-            
+
             # Verificar si el usuario ya visitó este link
             if has_user_visited_link(user_id, link_id):
-                continue  # Saltar links ya visitados
+                continue
 
             callback_id = f"link_{link_counter}"
             context.user_data['link_map'][callback_id] = {
@@ -232,14 +267,14 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not keyboard:
         text = (
-            f"🎁 **No hay links disponibles**\n\n"
+            f"🔗 **No hay links disponibles**\n\n"
             f"Ya has visitado todos los links disponibles.\n\n"
             f"💡 Vuelve más tarde cuando haya nuevos usuarios o links activos."
         )
-        keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
+        keyboard = [[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]]
 
     keyboard.append([InlineKeyboardButton("🔄 Más links", callback_data="more_links")])
-    keyboard.append([InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")])
+    keyboard.append([InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")])
 
     if update.callback_query:
         query = update.callback_query
@@ -254,7 +289,7 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
-    logger.info(f"🎁 Mostrados {link_counter - 1} usuarios disponibles")
+    logger.info(f"🔗 Mostrados {link_counter - 1} usuarios disponibles")
 
 async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Inicia el proceso de visita con temporizador oculto."""
@@ -276,7 +311,7 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     link_info = link_map[callback_id]
-    
+
     # Verificar que no sea su propio link
     if link_info['user_id'] == user_id:
         await query.edit_message_text(
@@ -284,7 +319,7 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
         )
         return
-    
+
     # Verificar si ya visitó este link antes
     if has_user_visited_link(user_id, link_info['link_id']):
         await query.edit_message_text(
@@ -295,7 +330,7 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         return
-    
+
     # Mostrar link con temporizador oculto
     await show_link_with_timer(update, context, link_info)
 
@@ -303,9 +338,9 @@ async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TY
     """Confirma la visita y otorga reputación."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = query.from_user.id
-    
+
     # Extraer datos del callback_data
     data_parts = query.data.split('_')
     if len(data_parts) >= 3:
@@ -317,7 +352,7 @@ async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
         )
         return
-    
+
     # Verificar que haya una verificación pendiente
     if user_id not in PENDING_VERIFICATIONS:
         await query.edit_message_text(
@@ -325,9 +360,9 @@ async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
         )
         return
-    
+
     pending = PENDING_VERIFICATIONS[user_id]
-    
+
     # Verificar que coincidan los datos
     if pending['link_id'] != link_id or pending['target_user_id'] != target_user_id:
         await query.edit_message_text(
@@ -335,7 +370,7 @@ async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
         )
         return
-    
+
     # Verificar expiración (5 minutos máximo después del temporizador)
     age = (datetime.utcnow() - pending['timestamp']).total_seconds()
     if age > MAX_WAIT_SECONDS + MIN_WAIT_SECONDS:
@@ -345,7 +380,7 @@ async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Intentar de nuevo", callback_data="earn_reputation")]])
         )
         return
-    
+
     # Verificar que no sea su propio link
     if pending['target_user_id'] == user_id:
         del PENDING_VERIFICATIONS[user_id]
@@ -354,7 +389,7 @@ async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
         )
         return
-    
+
     # Verificar si ya visitó este link antes (doble chequeo)
     if has_user_visited_link(user_id, link_id):
         del PENDING_VERIFICATIONS[user_id]
@@ -365,18 +400,18 @@ async def confirm_link_callback(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode='Markdown'
         )
         return
-    
+
     # Registrar el clic y otorgar reputación
     record_click(user_id, pending['link_id'], reputation_earned=5)
-    
+
     # Marcar este link como visitado por este usuario
     mark_link_as_visited(user_id, link_id)
-    
+
     logger.info(f"✅ +5 reputación para usuario {user_id} por visitar link de {pending['target_user_id']}")
-    
+
     # Limpiar pending
     del PENDING_VERIFICATIONS[user_id]
-    
+
     await query.edit_message_text(
         f"✅ **¡+5 reputación ganados!**\n\n"
         f"📊 Has visitado el link de **@{pending['username']}**\n\n"
@@ -392,13 +427,13 @@ async def cancel_verification(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Cancela la verificación pendiente."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = query.from_user.id
-    
+
     if user_id in PENDING_VERIFICATIONS:
         del PENDING_VERIFICATIONS[user_id]
         logger.info(f"❌ Usuario {user_id} canceló la verificación")
-    
+
     await query.edit_message_text(
         "❌ Verificación cancelada.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]])
@@ -409,19 +444,47 @@ async def more_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     logger.info("🔄 more_links: Mostrando más links")
     await query.answer()
-    await earn_reputation(update, context)
+    await visit_links(update, context)
 
 # ============================================
-# INSTAGRAM TASK
+# TAREA INSTAGRAM
 # ============================================
 
 WAITING_INSTAGRAM_USERNAME = 1
 
-async def instagram_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra la tarea de seguir Instagram (+100 reputación)."""
+async def instagram_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Tarea de seguir Instagram (+100 reputación)."""
     user_id = update.effective_user.id
-    logger.info(f"📸 instagram_task: Usuario {user_id} solicitó tarea Instagram")
-
+    user = get_user(user_id)
+    
+    logger.info(f"📸 instagram_reward: Usuario {user_id} solicitó tarea Instagram")
+    
+    # Verificar si ya reclamó
+    if has_user_claimed_instagram(user_id):
+        text = (
+            "📸 **Tarea de Instagram**\n\n"
+            "⚠️ **Ya has completado esta tarea anteriormente**\n\n"
+            "✨ Recompensa: +100 reputación\n"
+            "📊 Estado: ✅ Completada\n\n"
+            "💡 No puedes reclamar la misma tarea dos veces."
+        )
+        keyboard = [[InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]]
+        
+        if update.callback_query:
+            query = update.callback_query
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        return
+    
     text = (
         "📸 **Síguenos en Instagram y gana +100 reputación**\n\n"
         "🔗 Cuenta: @dany_vg56\n\n"
@@ -436,7 +499,7 @@ async def instagram_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("📸 Ir a Instagram", url="https://www.instagram.com/dany_vg56?igsh=M2I4NmRnZjZvdXhr")],
         [InlineKeyboardButton("✅ Confirmar seguimiento", callback_data="confirm_instagram")],
-        [InlineKeyboardButton("◀️ Volver", callback_data="volver_menu")]
+        [InlineKeyboardButton("◀️ Volver", callback_data="earn_reputation")]
     ]
 
     if update.callback_query:
@@ -484,6 +547,10 @@ async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAUL
         )
         return WAITING_INSTAGRAM_USERNAME
 
+    # Guardar solicitud en la base de datos
+    from database.database import create_instagram_request
+    create_instagram_request(user_id, username, instagram_user)
+
     ADMIN_ID = 5057900537
     try:
         await context.bot.send_message(
@@ -509,75 +576,3 @@ async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAUL
     )
 
     return ConversationHandler.END
-
-# ============================================
-# PROMOCIONAR CONTENIDO (VIP)
-# ============================================
-
-async def promotion_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Menú para promocionar contenido (VIP required)."""
-    user_id = update.effective_user.id
-    user = get_user(user_id)
-
-    logger.info(f"🎬 promotion_menu: Usuario {user_id} accedió a promocionar")
-
-    if not user or user.vip_level < 1:
-        text = (
-            "🎬 **Promocionar Contenido** (VIP Required)\n\n"
-            "❌ Debes ser VIP para usar esta función.\n\n"
-            "📊 **Beneficios VIP:**\n"
-            "✅ Promociona videos y obtén +2000 visitas\n"
-            "✅ +20 reputación por cada vista\n"
-            "✅ Prioridad en mostrado\n\n"
-            "⭐ Actualiza a VIP ahora y comienza a promocionar."
-        )
-        keyboard = [
-            [InlineKeyboardButton("⭐ Actualizar a VIP", callback_data="vip_info")],
-            [InlineKeyboardButton("◀️ Volver", callback_data="volver_menu")]
-        ]
-
-        if update.callback_query:
-            query = update.callback_query
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='Markdown'
-            )
-        return
-
-    text = (
-        f"🎬 **Promocionar Contenido** ⭐\n\n"
-        f"👤 VIP Level: {user.vip_level}\n\n"
-        f"📊 **¿Cómo funciona?**\n"
-        f"1️⃣ Envía un link de video\n"
-        f"2️⃣ Otros usuarios lo verán con +20 pts\n"
-        f"3️⃣ Mínimo 1 minuto de visualización\n"
-        f"4️⃣ Objetivo: +2000 visitas\n\n"
-        f"✅ Tu video será priorizado en la lista."
-    )
-
-    keyboard = [
-        [InlineKeyboardButton("🎥 Subir video", callback_data="upload_video")],
-        [InlineKeyboardButton("📊 Mis videos", callback_data="my_videos")],
-        [InlineKeyboardButton("◀️ Volver", callback_data="volver_menu")]
-    ]
-
-    if update.callback_query:
-        query = update.callback_query
-        await query.edit_message_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
-    else:
-        await update.message.reply_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
