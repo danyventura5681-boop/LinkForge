@@ -41,6 +41,20 @@ from handlers.vip import (
 from handlers.reputation import instagram_task, WAITING_INSTAGRAM_USERNAME
 from handlers.link import change_link_start, process_change_link, WAITING_NEW_LINK
 
+# ===========================================
+# NUEVOS IMPORTS PARA LinkForge 1.1
+# ===========================================
+from handlers.daily_reward import daily_reward
+from handlers.video import (
+    top_videos, watch_video, confirm_video_callback, 
+    cancel_video_verification, refresh_videos
+)
+from handlers.promote import (
+    promote_menu, add_video_start, process_video_url, process_video_title,
+    my_uploaded_videos, delete_video_callback, cancel_promote,
+    WAITING_VIDEO_URL, WAITING_VIDEO_TITLE
+)
+
 # Estados para conversación (admin)
 WAITING_USER_ID = 1
 WAITING_REPUTATION = 2
@@ -310,6 +324,20 @@ change_link_conv = ConversationHandler(
 )
 telegram_app.add_handler(change_link_conv)
 
+# ✅ NUEVO HANDLER PARA AGREGAR VIDEOS (PROMOCIONAR CONTENIDO)
+add_video_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(add_video_start, pattern="^add_video$")],
+    states={
+        WAITING_VIDEO_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_video_url)],
+        WAITING_VIDEO_TITLE: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_video_title)],
+    },
+    fallbacks=[
+        CallbackQueryHandler(cancel_promote, pattern="^promote_menu$"),
+        CommandHandler("cancel", cancel_promote),
+    ],
+)
+telegram_app.add_handler(add_video_conv)
+
 # ===========================================
 # 3. TERCERO: CALLBACK QUERY HANDLERS
 # ===========================================
@@ -327,13 +355,26 @@ telegram_app.add_handler(CallbackQueryHandler(check_payment_retry, pattern="^che
 telegram_app.add_handler(CallbackQueryHandler(manual_payment_start, pattern="^manual_payment$"))
 telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
 telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_users$"))
-telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel)$"))
+telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel|daily_reward|top_videos|promote_menu)$"))
 telegram_app.add_handler(CallbackQueryHandler(instagram_task, pattern="^instagram_task$"))
 telegram_app.add_handler(CallbackQueryHandler(change_link_start, pattern="^change_link$"))
 
 # ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VERIFICACIÓN DE VISITAS
 telegram_app.add_handler(CallbackQueryHandler(confirm_link_callback, pattern="^confirm_link_"))
 telegram_app.add_handler(CallbackQueryHandler(cancel_verification, pattern="^cancel_verification$"))
+
+# ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VIDEOS
+telegram_app.add_handler(CallbackQueryHandler(top_videos, pattern="^top_videos$"))
+telegram_app.add_handler(CallbackQueryHandler(watch_video, pattern="^video_"))
+telegram_app.add_handler(CallbackQueryHandler(confirm_video_callback, pattern="^confirm_video_"))
+telegram_app.add_handler(CallbackQueryHandler(cancel_video_verification, pattern="^cancel_video_verification$"))
+telegram_app.add_handler(CallbackQueryHandler(refresh_videos, pattern="^refresh_videos$"))
+
+# ✅ NUEVOS CALLBACKS PARA PROMOCIONAR CONTENIDO (VIP)
+telegram_app.add_handler(CallbackQueryHandler(promote_menu, pattern="^promote_menu$"))
+telegram_app.add_handler(CallbackQueryHandler(my_uploaded_videos, pattern="^my_uploaded_videos$"))
+telegram_app.add_handler(CallbackQueryHandler(delete_video_callback, pattern="^delete_video_"))
+telegram_app.add_handler(CallbackQueryHandler(daily_reward, pattern="^daily_reward$"))
 
 # ===========================================
 # 4. CUARTO: MESSAGE HANDLER (mínima prioridad - AL FINAL)
@@ -352,7 +393,7 @@ async def main():
     await telegram_app.initialize()
     await telegram_app.bot.delete_webhook(drop_pending_updates=True)
     logger.info("✅ Webhook eliminado")
-    logger.info("🚀 LinkForge iniciando con POLLING...")
+    logger.info("🚀 LinkForge 1.1 iniciando con POLLING...")
     await telegram_app.start()
     await telegram_app.updater.start_polling()
     await asyncio.Event().wait()
