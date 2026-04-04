@@ -1,0 +1,96 @@
+import logging
+from datetime import datetime, timedelta
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from database.database import get_user, add_reputation
+
+logger = logging.getLogger(__name__)
+
+# Diccionario para almacenar última recompensa diaria de cada usuario
+# {user_id: last_claim_date}
+DAILY_REWARDS = {}
+
+REWARD_AMOUNT = 50
+
+def can_claim_daily(user_id: int) -> tuple:
+    """
+    Verifica si el usuario puede reclamar la recompensa diaria.
+    Retorna (puede_reclamar, tiempo_restante)
+    """
+    if user_id not in DAILY_REWARDS:
+        return True, None
+    
+    last_claim = DAILY_REWARDS[user_id]
+    next_claim = last_claim + timedelta(hours=24)
+    now = datetime.utcnow()
+    
+    if now >= next_claim:
+        return True, None
+    
+    remaining = next_claim - now
+    return False, remaining
+
+def format_remaining_time(remaining: timedelta) -> str:
+    """Formatea el tiempo restante."""
+    hours = remaining.seconds // 3600
+    minutes = (remaining.seconds % 3600) // 60
+    seconds = remaining.seconds % 60
+    
+    if remaining.days > 0:
+        return f"{remaining.days} días, {hours} horas"
+    elif hours > 0:
+        return f"{hours} horas, {minutes} minutos"
+    elif minutes > 0:
+        return f"{minutes} minutos, {seconds} segundos"
+    else:
+        return f"{seconds} segundos"
+
+async def daily_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra el estado de la recompensa diaria."""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    logger.info(f"🎁 daily_reward: Usuario {user_id} solicitó recompensa diaria")
+    
+    can_claim, remaining = can_claim_daily(user_id)
+    
+    if can_claim:
+        # Reclamar recompensa
+        DAILY_REWARDS[user_id] = datetime.utcnow()
+        add_reputation(user_id, REWARD_AMOUNT)
+        
+        text = (
+            f"🎉 **¡Recompensa Diaria Reclamada!** 🎉\n\n"
+            f"✨ Has recibido **+{REWARD_AMOUNT} reputación**\n\n"
+            f"📊 **Tu reputación actual:** {user.reputation + REWARD_AMOUNT if user else REWARD_AMOUNT} puntos\n\n"
+            f"⏰ Vuelve mañana para más recompensas."
+        )
+        
+        keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
+        
+    else:
+        time_str = format_remaining_time(remaining)
+        text = (
+            f"⏰ **Recompensa Diaria**\n\n"
+            f"✨ Recompensa: **+{REWARD_AMOUNT} reputación**\n\n"
+            f"⚠️ Ya reclamaste tu recompensa hoy.\n\n"
+            f"📅 **Próxima recompensa disponible en:**\n"
+            f"`{time_str}`"
+        )
+        
+        keyboard = [[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]]
+    
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
