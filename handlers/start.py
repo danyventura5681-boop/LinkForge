@@ -43,19 +43,19 @@ async def process_visit_token(update: Update, context: ContextTypes.DEFAULT_TYPE
     """
     user = update.effective_user
     args = context.args
-    
+
     if not args or not args[0].startswith("visit_"):
         return
-    
+
     token = args[0][6:]  # Remover "visit_" del inicio
-    
+
     # Importar LINK_VISITS aquí para evitar import circular
     from handlers.reputation import LINK_VISITS
-    
+
     if token in LINK_VISITS:
         LINK_VISITS[token]["visited"] = True
         logger.info(f"✅ Usuario {user.id} abrió el link correctamente (token={token})")
-        
+
         # Opcional: Enviar mensaje de confirmación silenciosa
         try:
             await update.message.reply_text(
@@ -76,7 +76,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     # 🔥 PRIMERO: Procesar token de visita si existe
     await process_visit_token(update, context)
-    
+
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
@@ -146,10 +146,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"**Opciones disponibles:**"
     )
 
-    # Teclado del menú principal ACTUALIZADO con nuevos botones
+    # Teclado del menú principal (SIN Top Videos aquí, está dentro de Ganar Reputación)
     keyboard = [
         [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
-        [InlineKeyboardButton("🎬 Top Videos", callback_data="top_videos")],
         [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
         [InlineKeyboardButton("🎁 Recompensa Diaria", callback_data="daily_reward")],
         [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
@@ -280,7 +279,6 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
-        [InlineKeyboardButton("🎬 Top Videos", callback_data="top_videos")],
         [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
         [InlineKeyboardButton("🎁 Recompensa Diaria", callback_data="daily_reward")],
         [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
