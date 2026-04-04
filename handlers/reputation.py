@@ -3,10 +3,10 @@ import hashlib
 import uuid
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 from database.database import (
     get_top_users, get_user, add_reputation, get_user_links, record_click,
-    get_user_rank
+    get_referrals_count
 )
 
 logger = logging.getLogger(__name__)
@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 # SISTEMA DE TRACKING DE LINKS
 # ============================================
 
-# Almacenar clicks en memoria (en producción usar BD)
-# Formato: {"token_123": {"user_id": 5057900537, "timestamp": datetime, "link_id": 1}}
 LINK_VISITS = {}
 
 def generate_tracking_token(user_id: int, link_id: int) -> str:
@@ -27,8 +25,6 @@ def generate_tracking_token(user_id: int, link_id: int) -> str:
 
 def create_tracking_url(original_url: str, token: str, bot_username: str) -> str:
     """Crea una URL que redirige a través de nuestro bot."""
-    # URL que redirige: https://t.me/bot?start=visit_TOKEN
-    # Luego redirige a la URL original
     tracking_url = f"https://t.me/{bot_username}?start=visit_{token}"
     return tracking_url
 
@@ -49,9 +45,8 @@ def verify_link_visit(token: str) -> bool:
         return False
     
     visit = LINK_VISITS[token]
-    
-    # Verificar que no haya expirado (15 minutos)
     age = (datetime.utcnow() - visit["timestamp"]).total_seconds()
+    
     if age > 900:  # 15 minutos
         logger.warning(f"⏱️ Token expirado: {token}")
         del LINK_VISITS[token]
@@ -83,7 +78,6 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     logger.info(f"🎁 earn_reputation: Usuario {user_id} solicitó ganar reputación")
 
-    # Obtener top 10 usuarios
     top_users = get_top_users(limit=10)
     available_users = top_users[:5]
 
@@ -110,8 +104,8 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # ✅ Guardar mapa de links con tokens
     context.user_data['link_map'] = {}
+    context.user_data['visit_timestamps'] = {}
     bot_username = (await context.bot.get_me()).username
 
     text = "🎁 **Gana +5 reputación por cada link** 🎁\n\n"
@@ -128,9 +122,9 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             link_url = link.url
             link_id = link.id
 
-            # ✅ Generar token de tracking
             token = generate_tracking_token(user_id, link_id)
             tracking_url = create_tracking_url(link_url, token, bot_username)
+            register_link_visit(token, user_id, link_id)
             
             callback_id = f"link_{link_counter}"
             context.user_data['link_map'][callback_id] = {
@@ -145,7 +139,7 @@ async def earn_reputation(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([
                 InlineKeyboardButton(
                     f"🔗 @{username} ({user.reputation} pts)",
-                    url=tracking_url  # ✅ URL con tracking
+                    url=tracking_url
                 ),
                 InlineKeyboardButton(
                     "✅ Visitado",
@@ -208,7 +202,6 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # ✅ No permitir visitar tu propio link
     if user_id == target_user_id:
         await query.edit_message_text(
             "❌ No puedes visitar tu propio link.",
@@ -230,7 +223,6 @@ async def visit_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     logger.info(f"✅ +5 reputación para usuario {user_id} por visitar link de {target_user_id}")
 
-    # ✅ Eliminar del mapa
     del link_map[callback_id]
 
     await query.edit_message_text(
@@ -252,8 +244,10 @@ async def more_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await earn_reputation(update, context)
 
 # ============================================
-# NUEVAS FUNCIONES: INSTAGRAM TASK
+# INSTAGRAM TASK
 # ============================================
+
+WAITING_INSTAGRAM_USERNAME = 1
 
 async def instagram_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra la tarea de seguir Instagram (+100 reputación)."""
@@ -322,15 +316,6 @@ async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAUL
         )
         return "WAITING_INSTAGRAM_USERNAME"
 
-    # ✅ Guardar la solicitud en contexto para que el admin la vea
-    context.user_data['pending_instagram'] = {
-        'user_id': user_id,
-        'username': username,
-        'instagram_user': instagram_user,
-        'timestamp': datetime.utcnow()
-    }
-
-    # ✅ Notificar al admin
     ADMIN_ID = 5057900537
     try:
         await context.bot.send_message(
@@ -358,7 +343,7 @@ async def confirm_instagram_process(update: Update, context: ContextTypes.DEFAUL
     return "DONE"
 
 # ============================================
-# NUEVAS FUNCIONES: PROMOCIONAR CONTENIDO (VIP)
+# PROMOCIONAR CONTENIDO (VIP)
 # ============================================
 
 async def promotion_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -368,7 +353,6 @@ async def promotion_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     logger.info(f"🎬 promotion_menu: Usuario {user_id} accedió a promocionar")
 
-    # ✅ Verificar que sea VIP
     if not user or user.vip_level < 1:
         text = (
             "🎬 **Promocionar Contenido** (VIP Required)\n\n"
@@ -399,7 +383,6 @@ async def promotion_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # ✅ Es VIP - mostrar opciones
     text = (
         f"🎬 **Promocionar Contenido** ⭐\n\n"
         f"👤 VIP Level: {user.vip_level}\n\n"
