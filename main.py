@@ -26,7 +26,7 @@ from handlers.link import (
 )
 from handlers.ranking import ranking, ranking_button_handler
 from handlers.reputation import earn_reputation, visit_link, more_links, confirm_link_callback, cancel_verification, visit_links
-from handlers.referral import referral, process_referral
+from handlers.referral import referral, process_referral, referral_button_handler
 from handlers.admin import (
     admin_panel, add_reputation_start, add_reputation_get_user, 
     add_reputation_amount, reduce_reputation_start, reduce_reputation_get_user,
@@ -362,6 +362,9 @@ telegram_app.add_handler(CallbackQueryHandler(manual_payment_start, pattern="^ma
 telegram_app.add_handler(CallbackQueryHandler(admin_panel, pattern="^admin_panel$"))
 telegram_app.add_handler(CallbackQueryHandler(list_users, pattern="^admin_list_users$"))
 telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(register_link|show_ranking|earn_reputation|referral|vip_info|admin_panel|daily_reward|top_videos|promote_menu)$"))
+
+# ✅ CALLBACKS PARA SISTEMA DE REFERIDOS
+telegram_app.add_handler(CallbackQueryHandler(referral_button_handler, pattern="^(referral|view_referrals)$"))
 
 # ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VERIFICACIÓN DE VISITAS
 telegram_app.add_handler(CallbackQueryHandler(confirm_link_callback, pattern="^confirm_link_"))
