@@ -45,8 +45,10 @@ def format_time_remaining(expires_at):
 
 async def privacy_policy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra la política de privacidad y solicita aceptación."""
+    logger.info("📋 MOSTRANDO POLÍTICA DE PRIVACIDAD")
     user_id = update.effective_user.id
-    
+    logger.info(f"👤 Usuario: {user_id}")
+
     text = (
         "📋 **POLÍTICA DE PRIVACIDAD Y TÉRMINOS DE USO** 📋\n\n"
         "Bienvenido a **LinkForge**.\n\n"
@@ -78,12 +80,12 @@ async def privacy_policy(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Usarás la plataforma de manera responsable\n\n"
         "📧 Contacto: @dany_vg56"
     )
-    
+
     keyboard = [
         [InlineKeyboardButton("✅ ACEPTO LOS TÉRMINOS", callback_data="accept_privacy")],
         [InlineKeyboardButton("❌ RECHAZAR", callback_data="reject_privacy")]
     ]
-    
+
     if update.callback_query:
         query = update.callback_query
         await query.edit_message_text(
@@ -102,16 +104,16 @@ async def accept_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Usuario acepta la política de privacidad."""
     query = update.callback_query
     await query.answer()
-    
+
     user_id = query.from_user.id
     USER_ACCEPTED_PRIVACY[user_id] = True
-    
+
     await query.edit_message_text(
         "✅ **Has aceptado los términos de uso.**\n\n"
         "📊 Redirigiendo al panel principal...",
         parse_mode='Markdown'
     )
-    
+
     # Mostrar menú principal
     await start(update, context)
 
@@ -119,7 +121,7 @@ async def reject_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Usuario rechaza la política de privacidad."""
     query = update.callback_query
     await query.answer()
-    
+
     await query.edit_message_text(
         "❌ **Debes aceptar los términos de uso para usar LinkForge.**\n\n"
         "Si cambias de opinión, usa /start nuevamente.",
@@ -156,17 +158,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Mensaje de bienvenida y panel principal.
     """
+    logger.info("🚀🚀🚀 FUNCIÓN START EJECUTADA 🚀🚀🚀")
+    logger.info(f"📱 Usuario: {update.effective_user.id}")
+    logger.info(f"📝 Args: {context.args}")
+    
     # Procesar token de visita
     await process_visit_token(update, context)
-    
+
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
 
-    # Verificar si ya aceptó políticas
-    if telegram_id not in USER_ACCEPTED_PRIVACY:
-        await privacy_policy(update, context)
-        return
+    # ===========================================
+    # TEMPORAL: Política de privacidad DESACTIVADA
+    # ===========================================
+    logger.info(f"⚠️ Política de privacidad desactivada temporalmente para {telegram_id}")
 
     existing_user = get_user(telegram_id)
 
@@ -184,7 +190,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_created = create_user(telegram_id, username, referred_by=referrer_id)
         if user_created:
             logger.info(f"✅ Nuevo usuario creado: {telegram_id} (@{username})")
-        
+
         reputation = 0
         rank = "Nuevo"
         links = []
@@ -201,6 +207,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_videos = get_user_videos(telegram_id) if existing_user else []
     max_videos = 3 if vip_level >= 3 else 1
 
+    # Calcular total de vistas de links
+    total_link_views = sum(link.clicks_received or 0 for link in links)
+    
+    # Calcular total de vistas de videos
+    total_video_views = sum(video.views or 0 for video in user_videos)
+
     # Construir mensaje
     text = (
         f"🎉 **¡Bienvenido a LinkForge, {username}!** 🎉\n\n"
@@ -214,27 +226,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📌 **LINKS ACTIVOS**\n"
     )
-    
+
     # Mostrar links
     if links:
         for i, link in enumerate(links[:3], 1):
-            time_left = format_time_remaining(link.expires_at)
             text += f"{i}️⃣ `{link.url[:50]}...`\n"
         if links:
             text += f"⏳ **Tiempo restante:** {format_time_remaining(links[0].expires_at)}\n"
+        text += f"👁️ **Total vistas en links:** {total_link_views}\n"
     else:
         text += "❌ No hay links registrados\n"
-    
+
     text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
     text += f"🎬 **VIDEOS EN TOP**\n"
-    
+
     # Mostrar videos
     if user_videos:
         for i, video in enumerate(user_videos[:3], 1):
             text += f"{i}️⃣ `{video.title[:40]}...`\n"
+        text += f"👁️ **Total vistas en videos:** {total_video_views}\n"
     else:
         text += "❌ No hay videos publicados\n"
-    
+
     text += (
         f"\n━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📌 Registra tu link para comenzar a promocionarlo.\n"
@@ -266,6 +279,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
+    logger.info("✅ Mensaje de bienvenida enviado correctamente")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja los botones del menú principal"""
@@ -352,8 +366,14 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     links = get_user_links(user_id)
     vip_level = existing_user.vip_level or 0
     referrals_count = get_referrals_count(user_id)
-    
+
     user_videos = get_user_videos(user_id) if existing_user else []
+
+    # Calcular total de vistas de links
+    total_link_views = sum(link.clicks_received or 0 for link in links)
+    
+    # Calcular total de vistas de videos
+    total_video_views = sum(video.views or 0 for video in user_videos)
 
     text = (
         f"🎉 **¡Bienvenido a LinkForge, {username}!** 🎉\n\n"
@@ -367,24 +387,26 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📌 **LINKS ACTIVOS**\n"
     )
-    
+
     if links:
         for i, link in enumerate(links[:3], 1):
             text += f"{i}️⃣ `{link.url[:50]}...`\n"
         if links:
             text += f"⏳ **Tiempo restante:** {format_time_remaining(links[0].expires_at)}\n"
+        text += f"👁️ **Total vistas en links:** {total_link_views}\n"
     else:
         text += "❌ No hay links registrados\n"
-    
+
     text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
     text += f"🎬 **VIDEOS EN TOP**\n"
-    
+
     if user_videos:
         for i, video in enumerate(user_videos[:3], 1):
             text += f"{i}️⃣ `{video.title[:40]}...`\n"
+        text += f"👁️ **Total vistas en videos:** {total_video_views}\n"
     else:
         text += "❌ No hay videos publicados\n"
-    
+
     text += (
         f"\n━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📌 Registra tu link para comenzar a promocionarlo.\n"
