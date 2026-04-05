@@ -22,7 +22,9 @@ logger.info(f"✅ Token cargado correctamente")
 from handlers.start import start, button_handler, back_to_start, accept_privacy, reject_privacy
 from handlers.link import (
     register_start, process_link_message, confirm_replace_link, 
-    confirm_add_link, cancel_register_callback
+    confirm_add_link, cancel_register_callback, manage_links,
+    add_new_link_start, process_new_link, delete_link_callback,
+    change_link_start, process_change_link, WAITING_NEW_LINK
 )
 from handlers.ranking import ranking, ranking_button_handler
 from handlers.reputation import earn_reputation, visit_link, more_links, confirm_link_callback, cancel_verification, visit_links
@@ -40,7 +42,6 @@ from handlers.vip import (
     WAITING_PAYMENT_AMOUNT, WAITING_PAYMENT_ADDRESS, WAITING_PAYMENT_TX
 )
 from handlers.reputation import instagram_task, WAITING_INSTAGRAM_USERNAME, instagram_reward, confirm_instagram_process, confirm_instagram_start
-from handlers.link import change_link_start, process_change_link, WAITING_NEW_LINK
 
 # ===========================================
 # NUEVOS IMPORTS PARA LinkForge 1.1
@@ -317,15 +318,28 @@ instagram_conv = ConversationHandler(
 )
 telegram_app.add_handler(instagram_conv)
 
-# ✅ HANDLER PARA CAMBIAR LINK
+# ✅ HANDLER PARA AGREGAR NUEVO LINK (CONVERSATION)
+add_new_link_conv = ConversationHandler(
+    entry_points=[CallbackQueryHandler(add_new_link_start, pattern="^add_new_link$")],
+    states={
+        WAITING_NEW_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_new_link)],
+    },
+    fallbacks=[
+        CallbackQueryHandler(manage_links, pattern="^manage_links$"),
+        CommandHandler("cancel", manage_links),
+    ],
+)
+telegram_app.add_handler(add_new_link_conv)
+
+# ✅ HANDLER PARA CAMBIAR LINK (CONVERSATION)
 change_link_conv = ConversationHandler(
-    entry_points=[CallbackQueryHandler(change_link_start, pattern="^change_link$")],
+    entry_points=[CallbackQueryHandler(change_link_start, pattern="^change_link_")],
     states={
         WAITING_NEW_LINK: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_change_link)],
     },
     fallbacks=[
-        CallbackQueryHandler(back_to_start, pattern="^volver_menu$"),
-        CommandHandler("cancel", back_to_start),
+        CallbackQueryHandler(manage_links, pattern="^manage_links$"),
+        CommandHandler("cancel", manage_links),
     ],
 )
 telegram_app.add_handler(change_link_conv)
@@ -369,6 +383,10 @@ telegram_app.add_handler(CallbackQueryHandler(referral_button_handler, pattern="
 # ✅ CALLBACKS PARA POLÍTICA DE PRIVACIDAD
 telegram_app.add_handler(CallbackQueryHandler(accept_privacy, pattern="^accept_privacy$"))
 telegram_app.add_handler(CallbackQueryHandler(reject_privacy, pattern="^reject_privacy$"))
+
+# ✅ CALLBACKS PARA GESTIÓN DE LINKS
+telegram_app.add_handler(CallbackQueryHandler(manage_links, pattern="^manage_links$"))
+telegram_app.add_handler(CallbackQueryHandler(delete_link_callback, pattern="^delete_link_"))
 
 # ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VERIFICACIÓN DE VISITAS
 telegram_app.add_handler(CallbackQueryHandler(confirm_link_callback, pattern="^confirm_link_"))
