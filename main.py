@@ -28,7 +28,7 @@ from handlers.link import (
 )
 from handlers.ranking import ranking, ranking_button_handler
 from handlers.reputation import earn_reputation, visit_link, more_links, confirm_link_callback, cancel_verification, visit_links
-from handlers.referral import referral, process_referral, referral_button_handler
+from handlers.referral import referral, referral_button_handler  # ✅ Eliminado process_referral
 from handlers.admin import (
     admin_panel, add_reputation_start, add_reputation_get_user, 
     add_reputation_amount, reduce_reputation_start, reduce_reputation_get_user,
@@ -213,8 +213,7 @@ telegram_app = Application.builder().token(TOKEN).build()
 # ===========================================
 # 1. PRIMERO: COMMAND HANDLERS (máxima prioridad)
 # ===========================================
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(CommandHandler("start", process_referral))
+telegram_app.add_handler(CommandHandler("start", start))  # ✅ Solo un handler para /start
 telegram_app.add_handler(CommandHandler("confirmar", confirm_payment_command))
 
 # ===========================================
