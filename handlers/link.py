@@ -55,6 +55,7 @@ async def register_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = (
         "📝 **Envíame el link que quieres promocionar**\n\n"
+ "(Tu Link de referidos de Páginas, Bots, etc., links de grupos en Telegram, WhatsApp, etc.)\n\n"
         "Ejemplo: `https://tusitio.com`\n\n"
         "Recuerda incluir `http://` o `https://`"
     )
