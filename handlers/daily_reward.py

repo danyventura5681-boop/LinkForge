@@ -72,7 +72,7 @@ async def daily_reward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         time_str = format_remaining_time(remaining)
         text = (
             f"⏰ **Recompensa Diaria**\n\n"
-            f"✨ Recompensa: **+{REWARD_AMOUNT} reputación**\n\n"
+            
             f"⚠️ Ya reclamaste tu recompensa hoy.\n\n"
             f"📅 **Próxima recompensa disponible en:**\n"
             f"`{time_str}`"
