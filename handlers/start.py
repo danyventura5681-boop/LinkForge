@@ -4,13 +4,11 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import (
     get_user, create_user, get_user_rank, get_user_links, 
-    get_referrals_count, get_user_videos
+    get_referrals_count, get_user_videos,
+    has_user_accepted_privacy, set_user_accepted_privacy
 )
 
 logger = logging.getLogger(__name__)
-
-# Diccionario para almacenar usuarios que aceptaron políticas
-USER_ACCEPTED_PRIVACY = {}
 
 def format_time_remaining(expires_at):
     """Calcula los días y horas restantes (acepta datetime o string)"""
@@ -106,7 +104,10 @@ async def accept_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     user_id = query.from_user.id
-    USER_ACCEPTED_PRIVACY[user_id] = True
+    
+    # Guardar en base de datos
+    set_user_accepted_privacy(user_id)
+    logger.info(f"✅ Usuario {user_id} aceptó la política de privacidad")
 
     await query.edit_message_text(
         "✅ **Has aceptado los términos de uso.**\n\n"
@@ -170,9 +171,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.username or user.first_name or "Usuario"
 
     # ===========================================
-    # TEMPORAL: Política de privacidad DESACTIVADA
+    # POLÍTICA DE PRIVACIDAD ACTIVADA
     # ===========================================
-    logger.info(f"⚠️ Política de privacidad desactivada temporalmente para {telegram_id}")
+    # Verificar si ya aceptó políticas (usando BD)
+    if not has_user_accepted_privacy(telegram_id):
+        logger.info(f"📋 Usuario {telegram_id} no ha aceptado políticas - Mostrando")
+        await privacy_policy(update, context)
+        return
+    else:
+        logger.info(f"✅ Usuario {telegram_id} ya aceptó políticas")
 
     existing_user = get_user(telegram_id)
 
