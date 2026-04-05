@@ -2,9 +2,13 @@ import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import get_user, create_user, get_user_rank, get_user_links
+from database import get_user, create_user, get_user_rank, get_user_links, get_referrals_count
+from handlers.video import get_user_videos
 
 logger = logging.getLogger(__name__)
+
+# Diccionario para almacenar usuarios que aceptaron políticas
+USER_ACCEPTED_PRIVACY = {}
 
 def format_time_remaining(expires_at):
     """Calcula los días y horas restantes (acepta datetime o string)"""
@@ -12,11 +16,9 @@ def format_time_remaining(expires_at):
         return "No activo"
 
     try:
-        # Si es datetime, usarlo directamente
         if isinstance(expires_at, datetime):
             expires_dt = expires_at
         else:
-            # Si es string, convertirlo a datetime
             expires_dt = datetime.fromisoformat(str(expires_at).replace('Z', '+00:00'))
 
         now = datetime.utcnow()
@@ -27,36 +29,116 @@ def format_time_remaining(expires_at):
         remaining = expires_dt - now
         days = remaining.days
         hours = remaining.seconds // 3600
+        minutes = (remaining.seconds % 3600) // 60
 
         if days > 0:
             return f"{days} días, {hours} horas"
+        elif hours > 0:
+            return f"{hours} horas, {minutes} minutos"
         else:
-            return f"{hours} horas"
+            return f"{minutes} minutos"
     except Exception as e:
         logger.error(f"Error formateando tiempo: {e}")
         return "No disponible"
 
+async def privacy_policy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra la política de privacidad y solicita aceptación."""
+    user_id = update.effective_user.id
+    
+    text = (
+        "📋 **POLÍTICA DE PRIVACIDAD Y TÉRMINOS DE USO** 📋\n\n"
+        "Bienvenido a **LinkForge**.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "📌 **1. SERVICIO OFRECIDO**\n"
+        "LinkForge es una plataforma que permite a los usuarios promocionar "
+        "enlaces de referidos, videos y contenido digital, así como ganar "
+        "reputación interactuando con el contenido de otros usuarios.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "⚠️ **2. LIMITACIÓN DE RESPONSABILIDAD**\n"
+        "LinkForge NO se hace responsable por:\n"
+        "• Enlaces maliciosos o fraudulentos publicados por usuarios\n"
+        "• Empresas o servicios que no cumplan con las recompensas prometidas\n"
+        "• Daños directos o indirectos derivados del uso de enlaces de terceros\n"
+        "• Pérdida de datos, reputación o beneficios por mal uso de la plataforma\n\n"
+        "El usuario es el único responsable de verificar la legitimidad de los "
+        "enlaces que comparte y de los que visita.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "🔒 **3. DATOS RECOPILADOS**\n"
+        "• ID de Telegram\n"
+        "• Nombre de usuario\n"
+        "• Enlaces registrados\n"
+        "• Reputación y nivel VIP\n\n"
+        "No compartimos tus datos con terceros.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "✅ **Al presionar 'ACEPTO', confirmas que:**\n"
+        "• Has leído y aceptas estos términos\n"
+        "• Eres mayor de edad\n"
+        "• Usarás la plataforma de manera responsable\n\n"
+        "📧 Contacto: @dany_vg56"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("✅ ACEPTO LOS TÉRMINOS", callback_data="accept_privacy")],
+        [InlineKeyboardButton("❌ RECHAZAR", callback_data="reject_privacy")]
+    ]
+    
+    if update.callback_query:
+        query = update.callback_query
+        await query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        await update.message.reply_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+
+async def accept_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Usuario acepta la política de privacidad."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    USER_ACCEPTED_PRIVACY[user_id] = True
+    
+    await query.edit_message_text(
+        "✅ **Has aceptado los términos de uso.**\n\n"
+        "📊 Redirigiendo al panel principal...",
+        parse_mode='Markdown'
+    )
+    
+    # Mostrar menú principal
+    await start(update, context)
+
+async def reject_privacy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Usuario rechaza la política de privacidad."""
+    query = update.callback_query
+    await query.answer()
+    
+    await query.edit_message_text(
+        "❌ **Debes aceptar los términos de uso para usar LinkForge.**\n\n"
+        "Si cambias de opinión, usa /start nuevamente.",
+        parse_mode='Markdown'
+    )
+
 async def process_visit_token(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Marca que el usuario realmente abrió el link.
-    Esto se ejecuta cuando alguien hace clic en un link de verificación.
-    """
+    """Marca que el usuario realmente abrió el link."""
     user = update.effective_user
     args = context.args
 
     if not args or not args[0].startswith("visit_"):
         return
 
-    token = args[0][6:]  # Remover "visit_" del inicio
+    token = args[0][6:]
 
-    # Importar LINK_VISITS aquí para evitar import circular
     from handlers.reputation import LINK_VISITS
 
     if token in LINK_VISITS:
         LINK_VISITS[token]["visited"] = True
         logger.info(f"✅ Usuario {user.id} abrió el link correctamente (token={token})")
-
-        # Opcional: Enviar mensaje de confirmación silenciosa
         try:
             await update.message.reply_text(
                 "✅ **Verificación exitosa!**\n\n"
@@ -71,93 +153,107 @@ async def process_visit_token(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Mensaje de bienvenida y panel principal.
-    🔥 Manejo de referidos (ÚNICO PUNTO DE ENTRADA)
-    🔥 Manejo de verificación de visitas
     """
-    # 🔥 PRIMERO: Procesar token de visita si existe
+    # Procesar token de visita
     await process_visit_token(update, context)
-
+    
     user = update.effective_user
     telegram_id = user.id
     username = user.username or user.first_name or "Usuario"
 
+    # Verificar si ya aceptó políticas
+    if telegram_id not in USER_ACCEPTED_PRIVACY:
+        await privacy_policy(update, context)
+        return
+
     existing_user = get_user(telegram_id)
 
-    # 🔥 FIX REFERIDOS (ÚNICO PUNTO DE ENTRADA)
+    # Manejo de referidos
     if not existing_user:
         referrer_id = None
-
-        # Verificar si viene de un link de referido (ej: t.me/LinkForgeBot?start=ref_123456789)
         if context.args and context.args[0].startswith("ref_"):
             try:
                 referrer_id = int(context.args[0][4:])
-                logger.info(f"🔍 Referido detectado: {referrer_id} para nuevo usuario {telegram_id}")
-
-                # Verificar que no se refiera a sí mismo
                 if referrer_id == telegram_id:
-                    logger.warning(f"⚠️ Auto-referido detectado para {telegram_id}, ignorando")
                     referrer_id = None
-
-            except (ValueError, IndexError) as e:
-                logger.error(f"❌ Error procesando referido: {e}")
+            except (ValueError, IndexError):
                 referrer_id = None
 
-        # Crear usuario con el referido (la lógica de reputación está dentro de create_user)
         user_created = create_user(telegram_id, username, referred_by=referrer_id)
-
         if user_created:
-            logger.info(f"✅ Nuevo usuario creado: {telegram_id} (@{username}) con referido {referrer_id}")
-        else:
-            logger.error(f"❌ Error creando usuario: {telegram_id}")
-
-        # Datos para el nuevo usuario
+            logger.info(f"✅ Nuevo usuario creado: {telegram_id} (@{username})")
+        
         reputation = 0
         rank = "Nuevo"
         links = []
         vip_level = 0
+        referrals_count = 0
     else:
-        # Usuario existente
-        reputation = existing_user.reputation if existing_user.reputation else 0
+        reputation = existing_user.reputation or 0
         rank = get_user_rank(telegram_id) or "?"
         links = get_user_links(telegram_id)
-        vip_level = existing_user.vip_level if existing_user.vip_level else 0
-        logger.info(f"✅ Usuario existente: {telegram_id} (@{username})")
+        vip_level = existing_user.vip_level or 0
+        referrals_count = get_referrals_count(telegram_id)
 
-    # Mostrar información del link principal
-    main_link = links[0] if links else None
-    if main_link and main_link.expires_at:
-        time_remaining = format_time_remaining(main_link.expires_at)
-        link_display = f"🔗 **Link activo:** `{main_link.url}`\n⏳ **Tiempo restante:** {time_remaining}"
-    else:
-        link_display = "🔗 **Link:** No registrado"
+    # Obtener videos del usuario
+    user_videos = get_user_videos(telegram_id) if existing_user else []
+    max_videos = 3 if vip_level >= 3 else 1
 
-    # Mensaje de bienvenida
+    # Construir mensaje
     text = (
-        f"🎉 **¡Bienvenido a LinkForge, {username}!**\n\n"
-        f"🆔 **Tu ID:** `{telegram_id}`\n"
-        f"💎 **Tu reputación:** {reputation} puntos\n"
-        f"📈 **Posición en ranking:** #{rank}\n"
-        f"⭐ **VIP Nivel:** {vip_level}\n\n"
-        f"{link_display}\n\n"
+        f"🎉 **¡Bienvenido a LinkForge, {username}!** 🎉\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 **{username}**\n"
+        f"🆔 `{telegram_id}`\n"
+        f"💎 **Reputación:** {reputation} puntos\n"
+        f"👥 **Referidos:** {referrals_count}\n"
+        f"🏆 **Ranking:** #{rank}\n"
+        f"⭐ **VIP Nivel:** {vip_level}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📌 **LINKS ACTIVOS**\n"
+    )
+    
+    # Mostrar links
+    if links:
+        for i, link in enumerate(links[:3], 1):
+            time_left = format_time_remaining(link.expires_at)
+            text += f"{i}️⃣ `{link.url[:50]}...`\n"
+        if links:
+            text += f"⏳ **Tiempo restante:** {format_time_remaining(links[0].expires_at)}\n"
+    else:
+        text += "❌ No hay links registrados\n"
+    
+    text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"🎬 **VIDEOS EN TOP**\n"
+    
+    # Mostrar videos
+    if user_videos:
+        for i, video in enumerate(user_videos[:3], 1):
+            text += f"{i}️⃣ `{video.title[:40]}...`\n"
+    else:
+        text += "❌ No hay videos publicados\n"
+    
+    text += (
+        f"\n━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📌 Registra tu link para comenzar a promocionarlo.\n"
-        f"🎁 Gana reputación visitando links de otros usuarios.\n"
+        f"🏆 Gana reputación visitando links de otros usuarios, "
+        f"Entre más reputación más alto tú posición en el Top 😉\n"
         f"👥 Invita amigos y gana +50 por cada uno.\n"
         f"⭐ Actualiza a VIP para más beneficios.\n\n"
         f"**Opciones disponibles:**"
     )
 
-    # Teclado del menú principal (SIN Top Videos aquí, está dentro de Ganar Reputación)
+    # Teclado del menú principal
     keyboard = [
         [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
-        [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
+        [InlineKeyboardButton("💎 Ganar Reputación", callback_data="earn_reputation")],
         [InlineKeyboardButton("🎁 Recompensa Diaria", callback_data="daily_reward")],
         [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
-        [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
+        [InlineKeyboardButton("🏆 Ver Ranking", callback_data="show_ranking")],
         [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
         [InlineKeyboardButton("📱 Promocionar Contenido", callback_data="promote_menu")],
     ]
 
-    # Botón de admin solo para el admin principal
     if telegram_id == 5057900537:
         keyboard.append([InlineKeyboardButton("🛡️ Admin", callback_data="admin_panel")])
 
@@ -222,6 +318,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from handlers.promote import promote_menu
         await promote_menu(update, context)
 
+    elif data == "accept_privacy":
+        await accept_privacy(update, context)
+    elif data == "reject_privacy":
+        await reject_privacy(update, context)
+
     else:
         logger.info(f"🟡 Botón no reconocido: {data}")
         await query.edit_message_text(
@@ -229,16 +330,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Volver al Menú", callback_data="volver_menu")]])
         )
 
-# ===========================================
-# HANDLER ÚNICO PARA VOLVER AL MENÚ PRINCIPAL
-# ===========================================
-
 async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Handler único para volver al menú principal desde cualquier lugar.
-    Reconstruye el panel principal dinámicamente.
-    """
-    logger.info("🔙 🔙 🔙 back_to_start ha sido llamado 🔙 🔙 🔙")
+    """Handler para volver al menú principal."""
+    logger.info("🔙 back_to_start ha sido llamado")
 
     query = update.callback_query
     await query.answer()
@@ -254,24 +348,46 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reputation = existing_user.reputation or 0
     rank = get_user_rank(user_id) or "?"
     links = get_user_links(user_id)
-    vip_level = existing_user.vip_level if existing_user.vip_level else 0
-
-    main_link = links[0] if links else None
-    if main_link and main_link.expires_at:
-        time_remaining = format_time_remaining(main_link.expires_at)
-        link_display = f"🔗 **Link activo:** `{main_link.url}`\n⏳ **Tiempo restante:** {time_remaining}"
-    else:
-        link_display = "🔗 **Link:** No registrado"
+    vip_level = existing_user.vip_level or 0
+    referrals_count = get_referrals_count(user_id)
+    
+    user_videos = get_user_videos(user_id) if existing_user else []
 
     text = (
-        f"🎉 **¡Bienvenido a LinkForge, {username}!**\n\n"
-        f"🆔 **Tu ID:** `{user_id}`\n"
-        f"💎 **Tu reputación:** {reputation} puntos\n"
-        f"📈 **Posición en ranking:** #{rank}\n"
-        f"⭐ **VIP Nivel:** {vip_level}\n\n"
-        f"{link_display}\n\n"
+        f"🎉 **¡Bienvenido a LinkForge, {username}!** 🎉\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 **{username}**\n"
+        f"🆔 `{user_id}`\n"
+        f"💎 **Reputación:** {reputation} puntos\n"
+        f"👥 **Referidos:** {referrals_count}\n"
+        f"🏆 **Ranking:** #{rank}\n"
+        f"⭐ **VIP Nivel:** {vip_level}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"📌 **LINKS ACTIVOS**\n"
+    )
+    
+    if links:
+        for i, link in enumerate(links[:3], 1):
+            text += f"{i}️⃣ `{link.url[:50]}...`\n"
+        if links:
+            text += f"⏳ **Tiempo restante:** {format_time_remaining(links[0].expires_at)}\n"
+    else:
+        text += "❌ No hay links registrados\n"
+    
+    text += f"\n━━━━━━━━━━━━━━━━━━━━\n"
+    text += f"🎬 **VIDEOS EN TOP**\n"
+    
+    if user_videos:
+        for i, video in enumerate(user_videos[:3], 1):
+            text += f"{i}️⃣ `{video.title[:40]}...`\n"
+    else:
+        text += "❌ No hay videos publicados\n"
+    
+    text += (
+        f"\n━━━━━━━━━━━━━━━━━━━━\n\n"
         f"📌 Registra tu link para comenzar a promocionarlo.\n"
-        f"🎁 Gana reputación visitando links de otros usuarios.\n"
+        f"🏆 Gana reputación visitando links de otros usuarios, "
+        f"Entre más reputación más alto tú posición en el Top 😉\n"
         f"👥 Invita amigos y gana +50 por cada uno.\n"
         f"⭐ Actualiza a VIP para más beneficios.\n\n"
         f"**Opciones disponibles:**"
@@ -279,10 +395,10 @@ async def back_to_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("🔗 Registrar Link", callback_data="register_link")],
-        [InlineKeyboardButton("🎁 Ganar Reputación", callback_data="earn_reputation")],
+        [InlineKeyboardButton("💎 Ganar Reputación", callback_data="earn_reputation")],
         [InlineKeyboardButton("🎁 Recompensa Diaria", callback_data="daily_reward")],
         [InlineKeyboardButton("👥 Invitar Amigos", callback_data="referral")],
-        [InlineKeyboardButton("📊 Ver Ranking", callback_data="show_ranking")],
+        [InlineKeyboardButton("🏆 Ver Ranking", callback_data="show_ranking")],
         [InlineKeyboardButton("⭐ VIP", callback_data="vip_info")],
         [InlineKeyboardButton("📱 Promocionar Contenido", callback_data="promote_menu")],
     ]
