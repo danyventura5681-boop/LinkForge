@@ -19,7 +19,7 @@ logger.info(f"✅ Token cargado correctamente")
 # ===========================================
 # IMPORTAR HANDLERS (TODOS)
 # ===========================================
-from handlers.start import start, button_handler, back_to_start
+from handlers.start import start, button_handler, back_to_start, accept_privacy, reject_privacy
 from handlers.link import (
     register_start, process_link_message, confirm_replace_link, 
     confirm_add_link, cancel_register_callback
@@ -365,6 +365,10 @@ telegram_app.add_handler(CallbackQueryHandler(button_handler, pattern="^(registe
 
 # ✅ CALLBACKS PARA SISTEMA DE REFERIDOS
 telegram_app.add_handler(CallbackQueryHandler(referral_button_handler, pattern="^(referral|view_referrals)$"))
+
+# ✅ CALLBACKS PARA POLÍTICA DE PRIVACIDAD
+telegram_app.add_handler(CallbackQueryHandler(accept_privacy, pattern="^accept_privacy$"))
+telegram_app.add_handler(CallbackQueryHandler(reject_privacy, pattern="^reject_privacy$"))
 
 # ✅ NUEVOS CALLBACKS PARA EL SISTEMA DE VERIFICACIÓN DE VISITAS
 telegram_app.add_handler(CallbackQueryHandler(confirm_link_callback, pattern="^confirm_link_"))
