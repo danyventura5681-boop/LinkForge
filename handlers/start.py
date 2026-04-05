@@ -2,8 +2,10 @@ import logging
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from database import get_user, create_user, get_user_rank, get_user_links, get_referrals_count
-from handlers.video import get_user_videos
+from database import (
+    get_user, create_user, get_user_rank, get_user_links, 
+    get_referrals_count, get_user_videos
+)
 
 logger = logging.getLogger(__name__)
 
